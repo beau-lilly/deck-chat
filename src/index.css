@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+/* PDF page styling — ensure canvas and text layer align */
+.react-pdf__Page {
+  display: block;
+  margin: 0 auto;
+}
+
+.react-pdf__Page__canvas {
+  display: block;
+}
+
+.react-pdf__Page__annotations {
+  display: none !important;
+}
+
+/* Text layer: invisible text overlaid on the canvas for selection */
+.react-pdf__Page__textContent {
+  user-select: text !important;
+}
+
+/* Style text selection highlight */
+.react-pdf__Page__textContent ::selection {
+  background: rgba(99, 102, 241, 0.35);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
