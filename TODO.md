@@ -25,6 +25,9 @@
 - [x] Single click dismisses region selection box
 - [x] Small accidental drags (<8%) treated as dismiss clicks instead of creating micro-regions
 
+## Phase 1.2.1: Chat UX Polish
+- [x] Hide "Regarding the selected text:..." prefix from visible chat messages (context still sent to LLM via system prompt)
+
 ## Phase 1.3: API Key Gating + Error Handling
 - [x] Settings modal auto-opens on first load if no API key configured
 - [x] Upload buttons gated behind API key check (opens settings if missing)
