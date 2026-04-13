@@ -79,7 +79,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
         });
       }
     } else {
-      set({ dragMode: 'idle', drag: null, activePageNumber: null });
+      set({ dragMode: 'idle', drag: null, activePageNumber: null, pendingAnchor: null });
     }
   },
 
