@@ -46,6 +46,16 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
     pageTexts,
   );
 
+  const handleError = (chatId: string, err: string, isMounted: () => boolean) => {
+    const isAuthError = err.includes('Invalid API key') || err.includes('401');
+    const errorMsg = isAuthError
+      ? 'Invalid API key. Please update your Anthropic API key in Settings.'
+      : `Error: ${err}`;
+    updateLastAssistantMessage(chatId, errorMsg);
+    if (isAuthError) setShowSettings(true);
+    if (isMounted()) setIsStreaming(false);
+  };
+
   const handleDone = (usage?: UsageInfo) => {
     if (usage) {
       setLastUsage(usage);
@@ -92,10 +102,7 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
         handleDone(usage);
         if (mountedRef.current) setIsStreaming(false);
       },
-      (err) => {
-        updateLastAssistantMessage(chatId, `Error: ${err}`);
-        if (mountedRef.current) setIsStreaming(false);
-      },
+      (err) => handleError(chatId, err, () => mountedRef.current),
     );
   };
 
@@ -128,10 +135,7 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
         handleDone(usage);
         setIsStreaming(false);
       },
-      (err) => {
-        updateLastAssistantMessage(chatId, `Error: ${err}`);
-        setIsStreaming(false);
-      },
+      (err) => handleError(chatId, err, () => true),
     );
   };
 

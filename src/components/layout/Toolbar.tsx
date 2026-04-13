@@ -40,6 +40,15 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { pdfFile, pageCount, currentPage, scale, setPdfFile, setScale } = useDocumentStore();
 
+  const handleUploadClick = () => {
+    const { anthropicApiKey } = useSettingsStore.getState();
+    if (!anthropicApiKey) {
+      useSettingsStore.getState().setShowSettings(true);
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type === 'application/pdf') {
@@ -58,7 +67,7 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
       />
 
       <button
-        onClick={() => fileInputRef.current?.click()}
+        onClick={handleUploadClick}
         className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-colors"
       >
         <Upload size={14} />

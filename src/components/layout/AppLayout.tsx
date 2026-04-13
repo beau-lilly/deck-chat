@@ -9,6 +9,7 @@ import ApiKeySettings from '../settings/ApiKeySettings';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useChatStore } from '../../stores/chatStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { capturePageImage } from '../../services/pdfContext';
 import useResizeObserver from '../../hooks/useResizeObserver';
 import type { ContextMode } from '../../types';
@@ -64,6 +65,13 @@ export default function AppLayout() {
   }, [pendingAnchor, clearSelection, createChat]);
 
   const handleUploadClick = useCallback(() => {
+    // Require API key before allowing upload
+    const { anthropicApiKey, setShowSettings } = useSettingsStore.getState();
+    if (!anthropicApiKey) {
+      setShowSettings(true);
+      return;
+    }
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.pdf';

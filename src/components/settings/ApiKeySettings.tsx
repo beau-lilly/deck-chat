@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useSettingsStore, AVAILABLE_MODELS } from '../../stores/settingsStore';
 
@@ -7,6 +7,13 @@ export default function ApiKeySettings() {
     useSettingsStore();
   const [showKey, setShowKey] = useState(false);
   const [tempKey, setTempKey] = useState(anthropicApiKey);
+
+  // Auto-show settings on first load if no API key is configured
+  useEffect(() => {
+    if (!anthropicApiKey) {
+      setShowSettings(true);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!showSettings) return null;
 
