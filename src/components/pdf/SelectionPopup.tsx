@@ -1,14 +1,22 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, MessageSquare } from 'lucide-react';
 import { useSelectionStore } from '../../stores/selectionStore';
+import type { ContextMode } from '../../types';
 
 interface SelectionPopupProps {
-  onStartChat: (question: string) => void;
+  onStartChat: (question: string, contextMode: ContextMode) => void;
 }
+
+const CONTEXT_MODES: { value: ContextMode; label: string; hint: string }[] = [
+  { value: 'selection', label: 'Selection', hint: 'Region only' },
+  { value: 'slide', label: 'Slide', hint: 'Full page' },
+  { value: 'document', label: 'Full Doc', hint: 'All pages' },
+];
 
 export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
   const { pendingAnchor, tool, clearSelection } = useSelectionStore();
   const [question, setQuestion] = useState('');
+  const [contextMode, setContextMode] = useState<ContextMode>('selection');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const hasTextSelection = pendingAnchor?.description && tool === 'text';
@@ -16,6 +24,7 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
   useEffect(() => {
     if (pendingAnchor) {
       setQuestion('');
+      setContextMode('selection');
       // Don't auto-focus for text selections — it clears the highlight in Safari.
       // For region selections, auto-focus is fine.
       if (tool !== 'text') {
@@ -30,7 +39,7 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
     e.preventDefault();
     const q = question.trim();
     if (!q) return;
-    onStartChat(q);
+    onStartChat(q, contextMode);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -54,6 +63,27 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
             </p>
           </div>
         )}
+
+        {/* Context mode selector */}
+        <div className="flex items-center gap-1 mb-2">
+          <span className="text-[11px] text-slate-500 mr-1">Context:</span>
+          {CONTEXT_MODES.map((mode) => (
+            <button
+              key={mode.value}
+              type="button"
+              onClick={() => setContextMode(mode.value)}
+              className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+                contextMode === mode.value
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-300'
+              }`}
+              title={mode.hint}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center gap-2">
           <MessageSquare size={16} className="text-indigo-400 shrink-0" />
           <input

@@ -5,9 +5,10 @@ import ChatThread from './ChatThread';
 interface ChatPanelProps {
   open: boolean;
   pageImageBase64?: string;
+  fullPageImageBase64?: string;
 }
 
-export default function ChatPanel({ open, pageImageBase64 }: ChatPanelProps) {
+export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }: ChatPanelProps) {
   if (!open) return null;
 
   const { chats, activeChatId, setActiveChat } = useChatStore();
@@ -19,6 +20,7 @@ export default function ChatPanel({ open, pageImageBase64 }: ChatPanelProps) {
         <ChatThread
           chatId={activeChatId}
           pageImageBase64={pageImageBase64}
+          fullPageImageBase64={fullPageImageBase64}
           onBack={() => setActiveChat(null)}
         />
       </div>

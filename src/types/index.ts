@@ -1,3 +1,5 @@
+export type ContextMode = 'selection' | 'slide' | 'document';
+
 export interface ChatAnchor {
   pageNumber: number;
   type: 'region';
@@ -21,6 +23,7 @@ export interface Chat {
   anchor: ChatAnchor;
   title: string;
   messages: Message[];
+  contextMode: ContextMode;
   archived: boolean;
   needsResponse: boolean;
   createdAt: Date;

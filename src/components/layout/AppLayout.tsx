@@ -11,10 +11,12 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useChatStore } from '../../stores/chatStore';
 import { capturePageImage } from '../../services/pdfContext';
 import useResizeObserver from '../../hooks/useResizeObserver';
+import type { ContextMode } from '../../types';
 
 export default function AppLayout() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [pageImageBase64, setPageImageBase64] = useState<string | undefined>();
+  const [fullPageImageBase64, setFullPageImageBase64] = useState<string | undefined>();
   const pdfUrl = useDocumentStore((s) => s.pdfUrl);
   const setPdfFile = useDocumentStore((s) => s.setPdfFile);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
@@ -24,7 +26,7 @@ export default function AppLayout() {
   const clearSelection = useSelectionStore((s) => s.clearSelection);
   const createChat = useChatStore((s) => s.createChat);
 
-  const handleStartChat = useCallback(async (question: string) => {
+  const handleStartChat = useCallback(async (question: string, contextMode: ContextMode) => {
     if (!pendingAnchor) return;
 
     // Capture the page image before creating the chat
@@ -32,10 +34,21 @@ export default function AppLayout() {
       `[data-page="${pendingAnchor.pageNumber}"]`
     ) as HTMLElement | null;
 
-    let imgBase64: string | undefined;
+    let croppedImg: string | undefined;
+    let fullPageImg: string | undefined;
+
     if (pageEl) {
-      imgBase64 = await capturePageImage(pageEl, pendingAnchor);
-      setPageImageBase64(imgBase64);
+      // Always capture the cropped region
+      croppedImg = await capturePageImage(pageEl, pendingAnchor);
+      setPageImageBase64(croppedImg);
+
+      // For slide mode, also capture the full page
+      if (contextMode === 'slide') {
+        fullPageImg = await capturePageImage(pageEl);
+        setFullPageImageBase64(fullPageImg);
+      } else {
+        setFullPageImageBase64(undefined);
+      }
     }
 
     // Build the full first message: include selected text context if available
@@ -44,7 +57,7 @@ export default function AppLayout() {
       firstMessage = `Regarding the selected text: "${pendingAnchor.description}"\n\n${question}`;
     }
 
-    createChat(pendingAnchor, firstMessage);
+    createChat(pendingAnchor, firstMessage, contextMode);
 
     clearSelection();
     setPanelOpen(true);
@@ -74,7 +87,11 @@ export default function AppLayout() {
             <EmptyState onUpload={handleUploadClick} />
           )}
         </div>
-        <ChatPanel open={panelOpen} pageImageBase64={pageImageBase64} />
+        <ChatPanel
+          open={panelOpen}
+          pageImageBase64={pageImageBase64}
+          fullPageImageBase64={fullPageImageBase64}
+        />
       </div>
       <SelectionPopup onStartChat={handleStartChat} />
       <TextSelectionListener />

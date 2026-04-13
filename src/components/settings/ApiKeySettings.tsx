@@ -3,10 +3,10 @@ import { X, Eye, EyeOff } from 'lucide-react';
 import { useSettingsStore, AVAILABLE_MODELS } from '../../stores/settingsStore';
 
 export default function ApiKeySettings() {
-  const { openRouterApiKey, selectedModel, showSettings, setApiKey, setModel, setShowSettings } =
+  const { anthropicApiKey, selectedModel, showSettings, setApiKey, setModel, setShowSettings } =
     useSettingsStore();
   const [showKey, setShowKey] = useState(false);
-  const [tempKey, setTempKey] = useState(openRouterApiKey);
+  const [tempKey, setTempKey] = useState(anthropicApiKey);
 
   if (!showSettings) return null;
 
@@ -30,13 +30,13 @@ export default function ApiKeySettings() {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-300 mb-1.5">OpenRouter API Key</label>
+            <label className="block text-sm text-slate-300 mb-1.5">Anthropic API Key</label>
             <div className="relative">
               <input
                 type={showKey ? 'text' : 'password'}
                 value={tempKey}
                 onChange={(e) => setTempKey(e.target.value)}
-                placeholder="sk-or-..."
+                placeholder="sk-ant-..."
                 className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 pr-10"
               />
               <button
@@ -48,7 +48,15 @@ export default function ApiKeySettings() {
               </button>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Get your key at openrouter.ai/keys
+              Get your key at{' '}
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-400 hover:text-indigo-300"
+              >
+                console.anthropic.com/settings/keys
+              </a>
             </p>
           </div>
 

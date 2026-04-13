@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import type { Chat, ChatAnchor, Message } from '../types';
+import type { Chat, ChatAnchor, ContextMode, Message } from '../types';
 
 interface ChatState {
   chats: Chat[];
   activeChatId: string | null;
 
-  createChat: (anchor: ChatAnchor, firstMessage: string) => string;
+  createChat: (anchor: ChatAnchor, firstMessage: string, contextMode: ContextMode) => string;
   addMessage: (chatId: string, role: 'user' | 'assistant', content: string) => void;
   updateLastAssistantMessage: (chatId: string, content: string) => void;
   markResponseStarted: (chatId: string) => void;
@@ -21,7 +21,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   activeChatId: null,
 
-  createChat: (anchor, firstMessage) => {
+  createChat: (anchor, firstMessage, contextMode) => {
     const id = generateId();
     const now = new Date();
     const title = firstMessage.length > 60 ? firstMessage.slice(0, 60) + '...' : firstMessage;
@@ -33,6 +33,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: [
         { id: generateId(), role: 'user', content: firstMessage, createdAt: now },
       ],
+      contextMode,
       archived: false,
       needsResponse: true,
       createdAt: now,

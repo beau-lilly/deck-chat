@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 interface SettingsState {
-  openRouterApiKey: string;
+  anthropicApiKey: string;
   selectedModel: string;
   showSettings: boolean;
 
@@ -21,34 +21,42 @@ function loadSettings() {
 }
 
 function saveSettings(key: string, model: string) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ openRouterApiKey: key, selectedModel: model }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ anthropicApiKey: key, selectedModel: model }));
 }
 
 const saved = loadSettings();
 
 export const AVAILABLE_MODELS = [
-  { id: 'anthropic/claude-sonnet-4', name: 'Claude Sonnet 4' },
-  { id: 'anthropic/claude-haiku-4', name: 'Claude Haiku 4' },
-  { id: 'openai/gpt-4o', name: 'GPT-4o' },
-  { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini' },
-  { id: 'google/gemini-2.5-flash-preview', name: 'Gemini 2.5 Flash' },
+  { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
+  { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
+  { id: 'claude-haiku-4-20250414', name: 'Claude Haiku 4' },
 ];
 
+// Valid model IDs for the direct Anthropic API
+const VALID_MODEL_IDS = new Set(AVAILABLE_MODELS.map((m) => m.id));
+
+const DEFAULT_MODEL = 'claude-opus-4-20250514';
+
+// If the saved model is from an old provider format (e.g. "anthropic/claude-sonnet-4"), reset it
+const initialModel = (saved.selectedModel && VALID_MODEL_IDS.has(saved.selectedModel))
+  ? saved.selectedModel
+  : DEFAULT_MODEL;
+
 export const useSettingsStore = create<SettingsState>((set) => ({
-  openRouterApiKey: saved.openRouterApiKey || '',
-  selectedModel: saved.selectedModel || 'anthropic/claude-sonnet-4',
+  anthropicApiKey: saved.anthropicApiKey || '',
+  selectedModel: initialModel,
   showSettings: false,
 
   setApiKey: (key) => {
-    set({ openRouterApiKey: key });
+    set({ anthropicApiKey: key });
     const s = loadSettings();
-    saveSettings(key, s.selectedModel || 'anthropic/claude-sonnet-4');
+    saveSettings(key, s.selectedModel || DEFAULT_MODEL);
   },
 
   setModel: (model) => {
     set({ selectedModel: model });
     const s = loadSettings();
-    saveSettings(s.openRouterApiKey || '', model);
+    saveSettings(s.anthropicApiKey || '', model);
   },
 
   setShowSettings: (show) => set({ showSettings: show }),
