@@ -84,7 +84,7 @@ export default function TextSelectionListener() {
 
     pollRef.current = setInterval(poll, 150);
 
-    // Reset committed text when user starts a new selection (pointerdown)
+    // Reset when user clicks outside the popup — dismiss the prompt box
     function onPointerDown(e: PointerEvent) {
       const target = e.target as Element;
       // Don't reset if clicking inside the selection popup
@@ -93,6 +93,12 @@ export default function TextSelectionListener() {
       committedText.current = '';
       prevText.current = '';
       stableCount.current = 0;
+
+      // If there's a text-based pending anchor, clear it so the popup dismisses
+      const { pendingAnchor, tool } = useSelectionStore.getState();
+      if (pendingAnchor?.description && tool === 'text') {
+        useSelectionStore.getState().clearSelection();
+      }
     }
     document.addEventListener('pointerdown', onPointerDown, true);
 
