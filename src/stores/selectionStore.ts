@@ -26,7 +26,8 @@ interface SelectionState {
   clearSelection: () => void;
 }
 
-const DRAG_THRESHOLD = 5;
+const DRAG_THRESHOLD = 5;       // below this: treated as a click (percentage units)
+const MIN_REGION_SIZE = 8;      // below this in both dimensions: too small, dismiss instead
 
 export const useSelectionStore = create<SelectionState>((set, get) => ({
   tool: 'text',
@@ -62,8 +63,9 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       const width = Math.abs(x - drag.startX);
       const height = Math.abs(y - drag.startY);
 
-      if (width < DRAG_THRESHOLD && height < DRAG_THRESHOLD) {
-        set({ dragMode: 'idle', drag: null, activePageNumber: null });
+      if (width < MIN_REGION_SIZE && height < MIN_REGION_SIZE) {
+        // Too small to be intentional — treat as a dismiss click
+        set({ dragMode: 'idle', drag: null, activePageNumber: null, pendingAnchor: null });
       } else {
         set({
           dragMode: 'idle',
