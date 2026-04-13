@@ -18,6 +18,19 @@
 - [x] Removed `pdfs-2024-09-25` beta header (no longer sending raw PDF blocks)
 - [x] Cost reduction: ~$1/query → $0.02-0.23/query depending on mode
 
+## Phase 1.2: Text Selection UX
+- [x] Text selection auto-shows prompt popup directly (no intermediate "Ask about this" button)
+- [x] Works on both Safari and Chrome
+- [x] Clicking outside dismisses text selection popup
+- [x] Single click dismisses region selection box
+- [x] Small accidental drags (<8%) treated as dismiss clicks instead of creating micro-regions
+
+## Phase 1.3: API Key Gating + Error Handling
+- [x] Settings modal auto-opens on first load if no API key configured
+- [x] Upload buttons gated behind API key check (opens settings if missing)
+- [x] Auth errors (401/invalid key) auto-open settings with clear error message
+- [x] Fix Safari model select dropdown styling (appearance-none, custom chevron)
+
 ## Phase 1.5: Extended Thinking
 - [ ] Add option to enable extended thinking for Claude models
 - [ ] UI toggle for thinking mode (e.g. "Deep analysis" switch)
