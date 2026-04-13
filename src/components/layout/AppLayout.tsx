@@ -52,13 +52,7 @@ export default function AppLayout() {
       }
     }
 
-    // Build the full first message: include selected text context if available
-    let firstMessage = question;
-    if (pendingAnchor.description) {
-      firstMessage = `Regarding the selected text: "${pendingAnchor.description}"\n\n${question}`;
-    }
-
-    createChat(pendingAnchor, firstMessage, contextMode);
+    createChat(pendingAnchor, question, contextMode);
 
     clearSelection();
     setPanelOpen(true);
