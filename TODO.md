@@ -51,3 +51,56 @@
 - [ ] Free trial tier (limited messages/month)
 - [ ] Subscription tier (unlimited or higher limits)
 - [ ] Usage tracking and metering
+
+## Phase 4: Left Sidebar + Library Persistence
+### 4.A — Data model + Dexie persistence (DONE)
+- [x] Add `Folder` and `DocumentRecord` types; keep `Chat` shape for UI
+- [x] Dexie schema v1: `folders`, `documents`, `blobs`, `chats`, `messages`
+- [x] Repository layer (`src/data/repo.ts`) — single seam for future REST swap
+- [x] Store PDF bytes as Blob so refresh fully rehydrates documents
+- [x] Split `messages` into their own table for cheap streaming appends
+- [x] `documentStore.openDocument(id)` rehydrates the active document from Dexie
+- [x] `chatStore.loadChatsForDocument(id)` and all mutations persist via repo
+
+### 4.B — Left sidebar UI (DONE)
+- [x] Collapsible left sidebar with `/` root folder and tree view
+- [x] Folder / File filter toggle (All / Folders / Files)
+- [x] Click a PDF to open it; chats swap to that document
+- [x] Upload via sidebar or toolbar — lands in the currently-selected folder
+- [x] New-folder button in sidebar header
+- [x] Upload-target footer so users see where the next PDF will go
+
+### 4.B.1 — Chat list under each PDF (DONE)
+- [x] Each PDF row in the sidebar has a chevron to expand its chats
+- [x] Chats sort by anchor position: page ASC, then y ASC, then x ASC
+- [x] Click a chat to open its document and activate it
+- [x] `useChatsForDocument` liveQuery only mounts when a doc is expanded
+
+### 4.C — Folder & file CRUD (TODO)
+- [ ] Rename folder / rename document (context menu or inline)
+- [ ] Move document to another folder (picker)
+- [ ] Delete folder (cascading) with confirm dialog
+- [ ] Delete document (cascading chats + blobs)
+- [ ] Drag-and-drop: drop `.pdf` onto folder to upload there
+- [ ] Drag-and-drop: drag doc node onto folder to move
+
+### 4.D — Library settings (TODO)
+- [ ] Export / import library (zip of PDFs + metadata JSON)
+- [ ] Storage usage indicator (MB used by blobs)
+- [ ] "Clear all" with double confirm
+
+## Phase 5: Server-backed Library (future)
+Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI code should need to change.
+- [ ] Node server (Express or Hono) exposing the `Repo` verbs over REST
+- [ ] Persist PDFs to filesystem or S3; metadata in SQLite/Postgres
+- [ ] `RestRepo` client; env flag selects `DexieRepo` vs `RestRepo`
+- [ ] Auth (email/password or OAuth); user id scopes every query
+- [ ] HTTP-only cookie sessions
+- [ ] Optional offline cache: Dexie as a write-through layer over REST
+- [ ] Shareable links per folder / per PDF
+- [ ] Migrate `blobs` table to object storage before scale
+
+## Phase 6: Library + Chat UX polish (nice-to-have)
+- [ ] Search across all chats / documents
+- [ ] Starred / recently-opened documents
+- [ ] Per-document tags
