@@ -1,10 +1,6 @@
 import { useMemo } from 'react';
-import { FolderPlus, Upload } from 'lucide-react';
 import { useFolders, useAllDocuments } from '../../data/liveQueries';
 import { useLibrarianStore } from '../../stores/librarianStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { uploadPdfToFolder } from '../../services/uploadDocument';
-import { repo } from '../../data/repo';
 import { ROOT_FOLDER_ID, type DocumentRecord, type Folder } from '../../types';
 import FolderNode from './FolderNode';
 import SearchBar from './SearchBar';
@@ -116,51 +112,8 @@ export default function Sidebar() {
   const showFolders = filter === 'all' || filter === 'folders';
   const showFiles = filter === 'all' || filter === 'files';
 
-  const handleNewFolder = async () => {
-    const name = window.prompt('Folder name?');
-    if (!name || !name.trim()) return;
-    await repo.createFolder(selectedFolderId, name.trim());
-    useLibrarianStore.getState().expandFolder(selectedFolderId);
-  };
-
-  const handleUpload = () => {
-    const { anthropicApiKey, setShowSettings } = useSettingsStore.getState();
-    if (!anthropicApiKey) {
-      setShowSettings(true);
-      return;
-    }
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.pdf';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file && file.type === 'application/pdf') {
-        void uploadPdfToFolder(file, selectedFolderId);
-      }
-    };
-    input.click();
-  };
-
   return (
     <div className="w-64 h-full bg-slate-900 border-r border-slate-700 flex flex-col shrink-0">
-      <div className="h-12 border-b border-slate-700 flex items-center px-3 gap-1 shrink-0">
-        <h2 className="text-sm font-medium text-slate-200 flex-1">Files</h2>
-        <button
-          onClick={handleNewFolder}
-          className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
-          title="New folder"
-        >
-          <FolderPlus size={14} />
-        </button>
-        <button
-          onClick={handleUpload}
-          className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors"
-          title="Upload PDF"
-        >
-          <Upload size={14} />
-        </button>
-      </div>
-
       <div className="px-3 py-2 border-b border-slate-800">
         <SearchBar />
       </div>
