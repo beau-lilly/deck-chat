@@ -9,6 +9,7 @@ import { repo } from '../../data/repo';
 import ChatNode from './ChatNode';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import InlineEditor from './InlineEditor';
+import { setActiveDrag } from './dragPayload';
 
 interface Props {
   doc: DocumentRecord;
@@ -68,6 +69,22 @@ export default function DocumentNode({ doc, depth }: Props) {
     setEditingId(doc.id);
   };
 
+  // Drag source only — documents aren't drop targets.
+  const canDrag = !isEditing;
+  const onDragStart = (e: React.DragEvent) => {
+    if (!canDrag) {
+      e.preventDefault();
+      return;
+    }
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', doc.name);
+    setActiveDrag({ kind: 'document', id: doc.id });
+  };
+  const onDragEnd = () => {
+    setActiveDrag(null);
+  };
+
   const handleDelete = async () => {
     const ok = window.confirm(
       `Delete "${doc.name}" and all of its chats? This cannot be undone.`,
@@ -97,6 +114,9 @@ export default function DocumentNode({ doc, depth }: Props) {
       <div
         ref={rowRef}
         data-ctx-row="1"
+        draggable={canDrag}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
         style={{ paddingLeft: `${4 + depth * 14}px` }}
         className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded select-none transition-colors ${
           isActive ? 'bg-indigo-600/20 text-indigo-200' : 'text-slate-300 hover:bg-slate-800'

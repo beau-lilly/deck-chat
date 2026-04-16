@@ -16,6 +16,7 @@ export interface Repo {
   listFolders(): Promise<Folder[]>;
   createFolder(parentId: string, name: string): Promise<Folder>;
   renameFolder(id: string, name: string): Promise<void>;
+  moveFolder(id: string, parentId: string): Promise<void>;
   deleteFolder(id: string): Promise<void>;
 
   // documents
@@ -137,6 +138,21 @@ export const repo: Repo = {
   async renameFolder(id, name) {
     if (id === ROOT_FOLDER_ID) return; // root is immutable
     await db.folders.update(id, { name, updatedAt: new Date() });
+  },
+
+  async moveFolder(id, parentId) {
+    if (id === ROOT_FOLDER_ID) return; // root can't be reparented
+    if (id === parentId) return;
+    // Guard against cycles: reject if `parentId` is `id` or a descendant of
+    // `id`. Walk from id downward through children, looking for parentId.
+    const stack = [id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      if (cur === parentId) return; // would create a loop
+      const kids = await db.folders.where('parentId').equals(cur).toArray();
+      for (const k of kids) stack.push(k.id);
+    }
+    await db.folders.update(id, { parentId, updatedAt: new Date() });
   },
 
   async deleteFolder(id) {

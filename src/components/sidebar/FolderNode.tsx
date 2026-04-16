@@ -18,6 +18,7 @@ import { uploadPdfToFolder } from '../../services/uploadDocument';
 import DocumentNode from './DocumentNode';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import InlineEditor from './InlineEditor';
+import { canAcceptDrop, getActiveDrag, setActiveDrag } from './dragPayload';
 
 // Finder-style unique-name resolver: returns "untitled folder" if free,
 // otherwise "untitled folder 2", 3, … (skipping existing names, case-
@@ -69,7 +70,14 @@ export default function FolderNode({
   const isEditing = editingId === folder.id;
 
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
+  // Counter-based drag hover tracking: increment on dragenter, decrement on
+  // dragleave. Safari reports `relatedTarget: null` inconsistently so the
+  // `contains(relatedTarget)` trick doesn't work reliably there — the
+  // counter is resilient because enter/leave events balance regardless of
+  // which child is being crossed.
+  const dragEnterCount = useRef(0);
 
   // Safari's native context-menu pipeline is triggered by the right-button
   // mousedown, not by `contextmenu` — by the time `contextmenu` fires the
@@ -163,6 +171,72 @@ export default function FolderNode({
     if (selectedFolderId === folder.id) setSelectedFolderId(ROOT_FOLDER_ID);
   };
 
+  // --- Drag & drop ---------------------------------------------------------
+  // This row is both a drag SOURCE (the folder can be moved) and a drop
+  // TARGET (other folders or documents can be dropped into it). Root can
+  // only be a target, never a source.
+  const canDrag = !isRoot && !isEditing;
+
+  const onDragStart = (e: React.DragEvent) => {
+    if (!canDrag) {
+      e.preventDefault();
+      return;
+    }
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', folder.name);
+    setActiveDrag({ kind: 'folder', id: folder.id });
+  };
+
+  const onDragEnd = () => {
+    setActiveDrag(null);
+    dragEnterCount.current = 0;
+    setIsDropTarget(false);
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    const drag = getActiveDrag();
+    if (!drag) return;
+    if (!canAcceptDrop(drag, folder.id, folderChildren)) return;
+    e.preventDefault(); // preventDefault is what marks this as a valid drop target
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const onDragEnter = (e: React.DragEvent) => {
+    const drag = getActiveDrag();
+    if (!drag) return;
+    if (!canAcceptDrop(drag, folder.id, folderChildren)) return;
+    e.preventDefault();
+    dragEnterCount.current++;
+    // Only flip visible state on the first enter — subsequent enters from
+    // descendant-crossings are absorbed by the counter without re-rendering.
+    if (dragEnterCount.current === 1) setIsDropTarget(true);
+  };
+
+  const onDragLeave = () => {
+    if (dragEnterCount.current === 0) return;
+    dragEnterCount.current--;
+    if (dragEnterCount.current === 0) setIsDropTarget(false);
+  };
+
+  const onDrop = async (e: React.DragEvent) => {
+    const drag = getActiveDrag();
+    setActiveDrag(null);
+    dragEnterCount.current = 0;
+    setIsDropTarget(false);
+    if (!drag) return;
+    if (!canAcceptDrop(drag, folder.id, folderChildren)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (drag.kind === 'folder') {
+      await repo.moveFolder(drag.id, folder.id);
+    } else {
+      await repo.moveDocument(drag.id, folder.id);
+    }
+    // Auto-expand the target so the user sees where their item landed.
+    useLibrarianStore.getState().expandFolder(folder.id);
+  };
+
   const items: ContextMenuItem[] = [
     { label: 'New folder', icon: <FolderPlus size={12} />, onClick: handleNewSubfolder },
     { label: 'Upload PDF', icon: <Upload size={12} />, onClick: handleUploadHere },
@@ -185,9 +259,20 @@ export default function FolderNode({
       <div
         ref={rowRef}
         data-ctx-row="1"
+        draggable={canDrag}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
         style={{ paddingLeft: `${4 + depth * 14}px` }}
         className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded cursor-pointer select-none transition-colors ${
-          isSelected ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-800/60'
+          isDropTarget
+            ? 'ring-1 ring-indigo-400 bg-indigo-600/20 text-indigo-100'
+            : isSelected
+              ? 'bg-slate-800 text-slate-100'
+              : 'text-slate-300 hover:bg-slate-800/60'
         }`}
         onClick={() => setSelectedFolderId(folder.id)}
       >
