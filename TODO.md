@@ -87,6 +87,12 @@
 - [x] Root folder is always expanded — no chevron to collapse it
 - [x] Per-folder hover actions for new-folder and upload, scoped to the row
 
+### 4.B.4 — Context menus for folders and PDFs (DONE)
+- [x] Right-click folder → New folder / Upload / Rename / Delete (root omits Rename+Delete)
+- [x] Right-click PDF → Rename / Delete; clears viewer state if the deleted doc is open
+- [x] Cross-browser right-click: native capture-phase listeners + document-level preventDefault on mousedown(button=2) and contextmenu
+- [x] Hover-visible ⋮ kebab button as a guaranteed fallback when extensions (StopTheMadness, etc.) hijack right-click
+
 ### 4.C — Folder & file CRUD (TODO)
 - [ ] Rename folder / rename document (context menu or inline)
 - [ ] Move document to another folder (picker)
