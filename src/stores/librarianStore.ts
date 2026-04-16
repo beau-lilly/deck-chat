@@ -12,6 +12,9 @@ interface LibrarianState {
   filter: LibraryFilter;
   selectedFolderId: string;
   sidebarOpen: boolean;
+  // Search query typed into the sidebar — filters folders and documents
+  // by case-insensitive substring match. Empty string means no filter.
+  search: string;
 
   toggleFolder: (id: string) => void;
   expandFolder: (id: string) => void;
@@ -20,6 +23,7 @@ interface LibrarianState {
   setFilter: (f: LibraryFilter) => void;
   setSelectedFolderId: (id: string) => void;
   setSidebarOpen: (open: boolean) => void;
+  setSearch: (q: string) => void;
 }
 
 export const useLibrarianStore = create<LibrarianState>((set) => ({
@@ -29,6 +33,7 @@ export const useLibrarianStore = create<LibrarianState>((set) => ({
   filter: 'all',
   selectedFolderId: ROOT_FOLDER_ID,
   sidebarOpen: true,
+  search: '',
 
   toggleFolder: (id) =>
     set((s) => {
@@ -65,4 +70,5 @@ export const useLibrarianStore = create<LibrarianState>((set) => ({
   setFilter: (filter) => set({ filter }),
   setSelectedFolderId: (id) => set({ selectedFolderId: id }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setSearch: (q) => set({ search: q }),
 }));

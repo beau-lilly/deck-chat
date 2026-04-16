@@ -11,6 +11,9 @@ interface Props {
   folderChildren: Map<string, Folder[]>;
   showFolders: boolean;
   showFiles: boolean;
+  // When true (search mode), override per-folder expand state so every
+  // folder along a match path is visible without mutating user intent.
+  forceExpanded?: boolean;
 }
 
 export default function FolderNode({
@@ -21,8 +24,10 @@ export default function FolderNode({
   folderChildren,
   showFolders,
   showFiles,
+  forceExpanded = false,
 }: Props) {
-  const expanded = useLibrarianStore((s) => s.expanded.has(folder.id));
+  const userExpanded = useLibrarianStore((s) => s.expanded.has(folder.id));
+  const expanded = forceExpanded || userExpanded;
   const toggleFolder = useLibrarianStore((s) => s.toggleFolder);
   const selectedFolderId = useLibrarianStore((s) => s.selectedFolderId);
   const setSelectedFolderId = useLibrarianStore((s) => s.setSelectedFolderId);
@@ -75,6 +80,7 @@ export default function FolderNode({
                 folderChildren={folderChildren}
                 showFolders={showFolders}
                 showFiles={showFiles}
+                forceExpanded={forceExpanded}
               />
             ))}
           {showFiles &&
