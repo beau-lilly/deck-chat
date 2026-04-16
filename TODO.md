@@ -76,6 +76,12 @@
 - [x] Click a chat to open its document and activate it
 - [x] `useChatsForDocument` liveQuery only mounts when a doc is expanded
 
+### 4.B.2 — Search bar + filter dropdown (DONE)
+- [x] Replaced All/Folders/Files pills with a search input + sliders icon dropdown
+- [x] Search filters folders and documents by name; ancestors force-expand so matches stay reachable
+- [x] Filter dropdown (All / Folders only / Files only) with indicator dot when narrowed
+- [x] Escape or clear button resets the search; clicking outside closes the filter menu
+
 ### 4.C — Folder & file CRUD (TODO)
 - [ ] Rename folder / rename document (context menu or inline)
 - [ ] Move document to another folder (picker)
