@@ -8,6 +8,7 @@ import { useChatsForDocument } from '../../data/liveQueries';
 import { repo } from '../../data/repo';
 import ChatNode from './ChatNode';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
+import InlineEditor from './InlineEditor';
 
 interface Props {
   doc: DocumentRecord;
@@ -22,6 +23,9 @@ export default function DocumentNode({ doc, depth }: Props) {
   const setSelectedFolderId = useLibrarianStore((s) => s.setSelectedFolderId);
   const expanded = useLibrarianStore((s) => s.expandedDocs.has(doc.id));
   const toggleDocument = useLibrarianStore((s) => s.toggleDocument);
+  const editingId = useLibrarianStore((s) => s.editingId);
+  const setEditingId = useLibrarianStore((s) => s.setEditingId);
+  const isEditing = editingId === doc.id;
   const isActive = activeDocumentId === doc.id;
 
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -60,10 +64,8 @@ export default function DocumentNode({ doc, depth }: Props) {
     await loadChatsForDocument(doc.id);
   };
 
-  const handleRename = async () => {
-    const name = window.prompt('Rename document:', doc.name);
-    if (!name || !name.trim() || name.trim() === doc.name) return;
-    await repo.renameDocument(doc.id, name.trim());
+  const handleRename = () => {
+    setEditingId(doc.id);
   };
 
   const handleDelete = async () => {
@@ -110,14 +112,30 @@ export default function DocumentNode({ doc, depth }: Props) {
         >
           {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
         </button>
-        <button
-          onClick={handleOpen}
-          className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
-          title={doc.name}
-        >
-          <FileText size={12} className="shrink-0 text-slate-500" />
-          <span className="truncate">{doc.name}</span>
-        </button>
+        {isEditing ? (
+          <div className="flex-1 min-w-0 flex items-center gap-1.5">
+            <FileText size={12} className="shrink-0 text-slate-500" />
+            <InlineEditor
+              initialValue={doc.name}
+              selectBasename
+              onCommit={async (newName) => {
+                await repo.renameDocument(doc.id, newName);
+                setEditingId(null);
+              }}
+              onCancel={() => setEditingId(null)}
+              className="flex-1 min-w-0"
+            />
+          </div>
+        ) : (
+          <button
+            onClick={handleOpen}
+            className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
+            title={doc.name}
+          >
+            <FileText size={12} className="shrink-0 text-slate-500" />
+            <span className="truncate">{doc.name}</span>
+          </button>
+        )}
 
         {/* Kebab trigger — always-available fallback so users whose right-
             click is blocked by an extension can still reach rename/delete. */}

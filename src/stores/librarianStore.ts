@@ -15,6 +15,9 @@ interface LibrarianState {
   // Search query typed into the sidebar — filters folders and documents
   // by case-insensitive substring match. Empty string means no filter.
   search: string;
+  // ID of a folder or document currently being renamed inline. Only one
+  // item can be in edit mode at a time; null means no editor is open.
+  editingId: string | null;
 
   toggleFolder: (id: string) => void;
   expandFolder: (id: string) => void;
@@ -24,6 +27,7 @@ interface LibrarianState {
   setSelectedFolderId: (id: string) => void;
   setSidebarOpen: (open: boolean) => void;
   setSearch: (q: string) => void;
+  setEditingId: (id: string | null) => void;
 }
 
 export const useLibrarianStore = create<LibrarianState>((set) => ({
@@ -34,6 +38,7 @@ export const useLibrarianStore = create<LibrarianState>((set) => ({
   selectedFolderId: ROOT_FOLDER_ID,
   sidebarOpen: true,
   search: '',
+  editingId: null,
 
   toggleFolder: (id) =>
     set((s) => {
@@ -71,4 +76,5 @@ export const useLibrarianStore = create<LibrarianState>((set) => ({
   setSelectedFolderId: (id) => set({ selectedFolderId: id }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSearch: (q) => set({ search: q }),
+  setEditingId: (id) => set({ editingId: id }),
 }));

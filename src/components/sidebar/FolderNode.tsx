@@ -17,6 +17,21 @@ import { repo } from '../../data/repo';
 import { uploadPdfToFolder } from '../../services/uploadDocument';
 import DocumentNode from './DocumentNode';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
+import InlineEditor from './InlineEditor';
+
+// Finder-style unique-name resolver: returns "untitled folder" if free,
+// otherwise "untitled folder 2", 3, … (skipping existing names, case-
+// insensitive match).
+function nextUntitledName(existing: string[]): string {
+  const lc = new Set(existing.map((n) => n.toLowerCase()));
+  const base = 'untitled folder';
+  if (!lc.has(base)) return base;
+  for (let n = 2; n < 10_000; n++) {
+    const candidate = `${base} ${n}`;
+    if (!lc.has(candidate.toLowerCase())) return candidate;
+  }
+  return `${base} ${Date.now()}`; // absurd fallback
+}
 
 interface Props {
   folder: Folder;
@@ -49,6 +64,9 @@ export default function FolderNode({
   const toggleFolder = useLibrarianStore((s) => s.toggleFolder);
   const selectedFolderId = useLibrarianStore((s) => s.selectedFolderId);
   const setSelectedFolderId = useLibrarianStore((s) => s.setSelectedFolderId);
+  const editingId = useLibrarianStore((s) => s.editingId);
+  const setEditingId = useLibrarianStore((s) => s.setEditingId);
+  const isEditing = editingId === folder.id;
 
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -101,10 +119,13 @@ export default function FolderNode({
   const hasChildren = childFolders.length > 0 || docs.length > 0;
 
   const handleNewSubfolder = async () => {
-    const name = window.prompt('Folder name?');
-    if (!name || !name.trim()) return;
-    await repo.createFolder(folder.id, name.trim());
+    // Finder pattern: create with a default unique name, then immediately
+    // open an inline editor on the new folder so the user can rename it.
+    const existing = (childFolders ?? []).map((f) => f.name);
+    const defaultName = nextUntitledName(existing);
+    const newFolder = await repo.createFolder(folder.id, defaultName);
     useLibrarianStore.getState().expandFolder(folder.id);
+    setEditingId(newFolder.id);
   };
 
   const handleUploadHere = () => {
@@ -126,10 +147,9 @@ export default function FolderNode({
     input.click();
   };
 
-  const handleRename = async () => {
-    const name = window.prompt('Rename folder:', folder.name);
-    if (!name || !name.trim() || name.trim() === folder.name) return;
-    await repo.renameFolder(folder.id, name.trim());
+  const handleRename = () => {
+    // Inline edit — the row renders an InlineEditor when editingId matches.
+    setEditingId(folder.id);
   };
 
   const handleDelete = async () => {
@@ -194,7 +214,19 @@ export default function FolderNode({
         ) : (
           <FolderIcon size={12} className="text-indigo-400 shrink-0" />
         )}
-        <span className="flex-1 min-w-0 truncate">{folder.name}</span>
+        {isEditing ? (
+          <InlineEditor
+            initialValue={folder.name}
+            onCommit={async (newName) => {
+              await repo.renameFolder(folder.id, newName);
+              setEditingId(null);
+            }}
+            onCancel={() => setEditingId(null)}
+            className="flex-1 min-w-0"
+          />
+        ) : (
+          <span className="flex-1 min-w-0 truncate">{folder.name}</span>
+        )}
 
         {/* Kebab trigger — always-available fallback for users whose
             right-click is blocked by a browser extension (e.g. StopTheMadness).
