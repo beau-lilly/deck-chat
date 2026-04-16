@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -5,6 +6,9 @@ import {
   FolderOpen,
   FolderPlus,
   Upload,
+  Pencil,
+  Trash2,
+  MoreVertical,
 } from 'lucide-react';
 import { ROOT_FOLDER_ID, type Folder, type DocumentRecord } from '../../types';
 import { useLibrarianStore } from '../../stores/librarianStore';
@@ -12,6 +16,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { repo } from '../../data/repo';
 import { uploadPdfToFolder } from '../../services/uploadDocument';
 import DocumentNode from './DocumentNode';
+import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 
 interface Props {
   folder: Folder;
@@ -45,20 +50,64 @@ export default function FolderNode({
   const selectedFolderId = useLibrarianStore((s) => s.selectedFolderId);
   const setSelectedFolderId = useLibrarianStore((s) => s.setSelectedFolderId);
 
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // Safari's native context-menu pipeline is triggered by the right-button
+  // mousedown, not by `contextmenu` — by the time `contextmenu` fires the
+  // native menu may already be committed. The only reliable cross-browser
+  // fix is:
+  //   1. Prevent default on MOUSEDOWN when button === 2 (right). This
+  //      cuts the native menu off at the earliest point in WebKit's input
+  //      pipeline, before it ever decides to show the page menu.
+  //   2. Still render our menu in the `contextmenu` handler (some paths,
+  //      like ctrl+click on macOS, may not emit button=2 mousedown).
+  // Capture-phase listeners fire as the event descends (before any child
+  // or sibling handler), which is the earliest point JS can intervene.
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        // stopPropagation so parent rows don't also open a menu
+        e.stopPropagation();
+        setSelectedFolderId(folder.id);
+        setMenu({ x: e.clientX, y: e.clientY });
+      }
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      // Some input paths (notably macOS ctrl+click and some trackpads)
+      // skip the button=2 mousedown and jump straight to contextmenu.
+      e.preventDefault();
+      e.stopPropagation();
+      // Only open the menu if mousedown didn't already do it (avoid a
+      // flicker from setMenu fires in the same tick).
+      setMenu((prev) => prev ?? { x: e.clientX, y: e.clientY });
+      setSelectedFolderId(folder.id);
+    };
+
+    el.addEventListener('mousedown', onMouseDown, { capture: true });
+    el.addEventListener('contextmenu', onContextMenu, { capture: true });
+    return () => {
+      el.removeEventListener('mousedown', onMouseDown, { capture: true } as EventListenerOptions);
+      el.removeEventListener('contextmenu', onContextMenu, { capture: true } as EventListenerOptions);
+    };
+  }, [folder.id, setSelectedFolderId]);
+
   const isSelected = selectedFolderId === folder.id;
   const docs = documentsByFolder.get(folder.id) ?? [];
   const hasChildren = childFolders.length > 0 || docs.length > 0;
 
-  const handleNewSubfolder = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleNewSubfolder = async () => {
     const name = window.prompt('Folder name?');
     if (!name || !name.trim()) return;
     await repo.createFolder(folder.id, name.trim());
     useLibrarianStore.getState().expandFolder(folder.id);
   };
 
-  const handleUploadHere = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleUploadHere = () => {
     const { anthropicApiKey, setShowSettings } = useSettingsStore.getState();
     if (!anthropicApiKey) {
       setShowSettings(true);
@@ -77,11 +126,47 @@ export default function FolderNode({
     input.click();
   };
 
+  const handleRename = async () => {
+    const name = window.prompt('Rename folder:', folder.name);
+    if (!name || !name.trim() || name.trim() === folder.name) return;
+    await repo.renameFolder(folder.id, name.trim());
+  };
+
+  const handleDelete = async () => {
+    const ok = window.confirm(
+      `Delete folder "${folder.name}" and everything inside it (subfolders, PDFs, and chats)? This cannot be undone.`,
+    );
+    if (!ok) return;
+    await repo.deleteFolder(folder.id);
+    // If the deleted folder was the upload target, snap selection back to root
+    // so the next upload doesn't land on a ghost id.
+    if (selectedFolderId === folder.id) setSelectedFolderId(ROOT_FOLDER_ID);
+  };
+
+  const items: ContextMenuItem[] = [
+    { label: 'New folder', icon: <FolderPlus size={12} />, onClick: handleNewSubfolder },
+    { label: 'Upload PDF', icon: <Upload size={12} />, onClick: handleUploadHere },
+  ];
+  if (!isRoot) {
+    items.push(
+      { separator: true, label: '', onClick: () => {} },
+      { label: 'Rename', icon: <Pencil size={12} />, onClick: handleRename },
+      {
+        label: 'Delete',
+        icon: <Trash2 size={12} />,
+        onClick: handleDelete,
+        destructive: true,
+      },
+    );
+  }
+
   return (
     <div>
       <div
+        ref={rowRef}
+        data-ctx-row="1"
         style={{ paddingLeft: `${4 + depth * 14}px` }}
-        className={`group flex items-center gap-1 pr-1 py-1 text-xs rounded cursor-pointer transition-colors ${
+        className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded cursor-pointer select-none transition-colors ${
           isSelected ? 'bg-slate-800 text-slate-100' : 'text-slate-300 hover:bg-slate-800/60'
         }`}
         onClick={() => setSelectedFolderId(folder.id)}
@@ -111,28 +196,40 @@ export default function FolderNode({
         )}
         <span className="flex-1 min-w-0 truncate">{folder.name}</span>
 
-        {/* Hover-revealed actions. `opacity-0` keeps them out of the way until
-            the user actually hovers (or focuses) the row; the tree stays quiet
-            when scanning. */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
-          <button
-            onClick={handleNewSubfolder}
-            className="p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-700"
-            title="New folder here"
-            aria-label="New folder here"
-          >
-            <FolderPlus size={12} />
-          </button>
-          <button
-            onClick={handleUploadHere}
-            className="p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-700"
-            title="Upload PDF here"
-            aria-label="Upload PDF here"
-          >
-            <Upload size={12} />
-          </button>
-        </div>
+        {/* Kebab trigger — always-available fallback for users whose
+            right-click is blocked by a browser extension (e.g. StopTheMadness).
+            Only appears on hover so the tree stays clean. */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedFolderId(folder.id);
+            // Anchor the menu to the kebab's bottom-right. ContextMenu clamps
+            // to the viewport so a right-aligned drop reads naturally on a
+            // sidebar-width row.
+            const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+            // Position menu so its right edge sits under the kebab's right
+            // edge; ContextMenu handles the inner clamp if space is tight.
+            const MENU_WIDTH_ESTIMATE = 180;
+            setMenu({ x: rect.right - MENU_WIDTH_ESTIMATE, y: rect.bottom + 2 });
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="shrink-0 p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-700 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          title="More actions"
+          aria-label="More actions"
+          aria-haspopup="menu"
+        >
+          <MoreVertical size={12} />
+        </button>
       </div>
+
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={items}
+          onClose={() => setMenu(null)}
+        />
+      )}
 
       {expanded && (
         <div>

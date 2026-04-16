@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useFolders, useAllDocuments } from '../../data/liveQueries';
 import { useLibrarianStore } from '../../stores/librarianStore';
 import { ROOT_FOLDER_ID, type DocumentRecord, type Folder } from '../../types';
@@ -106,6 +106,40 @@ export default function Sidebar() {
       noResults: !rootVisible,
     };
   }, [folders, documents, searching, query]);
+
+  // Document-level capture preventDefault for right-click on any sidebar row.
+  // This is the earliest point in the event pipeline where JS can intervene
+  // — earlier than any element-level listener — which is necessary in Safari
+  // where the native context-menu dispatcher runs very early in the input
+  // pipeline. Per-row listeners still handle the actual menu opening; this
+  // effect only exists to kill the native menu.
+  useEffect(() => {
+    const preventOnRow = (e: Event) => {
+      const target = e.target as Element | null;
+      if (!target) return;
+      const mouse = e as MouseEvent;
+      // Only intercept right-button mousedown (button === 2); contextmenu is
+      // always right-click or ctrl+click so all instances get suppressed.
+      if (e.type === 'mousedown' && mouse.button !== 2) return;
+      const row = target.closest('[data-ctx-row="1"]');
+      if (!row) return;
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', preventOnRow, { capture: true });
+    document.addEventListener('mousedown', preventOnRow, { capture: true });
+    return () => {
+      document.removeEventListener(
+        'contextmenu',
+        preventOnRow,
+        { capture: true } as EventListenerOptions,
+      );
+      document.removeEventListener(
+        'mousedown',
+        preventOnRow,
+        { capture: true } as EventListenerOptions,
+      );
+    };
+  }, []);
 
   if (!sidebarOpen) return null;
 
