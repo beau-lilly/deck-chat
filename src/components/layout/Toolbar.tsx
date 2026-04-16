@@ -1,8 +1,10 @@
 import { useRef } from 'react';
-import { Upload, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect } from 'lucide-react';
+import { Upload, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft } from 'lucide-react';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSelectionStore, type SelectionTool } from '../../stores/selectionStore';
+import { useLibrarianStore } from '../../stores/librarianStore';
+import { uploadPdfToFolder } from '../../services/uploadDocument';
 
 interface ToolbarProps {
   onTogglePanel: () => void;
@@ -38,7 +40,9 @@ function SelectionToolToggle() {
 
 export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { pdfFile, pageCount, currentPage, scale, setPdfFile, setScale } = useDocumentStore();
+  const { pdfFile, pageCount, currentPage, scale, setScale } = useDocumentStore();
+  const sidebarOpen = useLibrarianStore((s) => s.sidebarOpen);
+  const setSidebarOpen = useLibrarianStore((s) => s.setSidebarOpen);
 
   const handleUploadClick = () => {
     const { anthropicApiKey } = useSettingsStore.getState();
@@ -52,8 +56,11 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
+      const folderId = useLibrarianStore.getState().selectedFolderId;
+      void uploadPdfToFolder(file, folderId);
     }
+    // Reset so picking the same file twice re-triggers onChange.
+    if (e.target) e.target.value = '';
   };
 
   return (
@@ -65,6 +72,14 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
         onChange={handleFileChange}
         className="hidden"
       />
+
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-md transition-colors"
+        title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+      >
+        <PanelLeft size={14} />
+      </button>
 
       <button
         onClick={handleUploadClick}

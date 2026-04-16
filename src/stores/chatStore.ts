@@ -1,11 +1,21 @@
 import { create } from 'zustand';
 import type { Chat, ChatAnchor, ContextMode, Message } from '../types';
+import { repo } from '../data/repo';
 
 interface ChatState {
   chats: Chat[];
   activeChatId: string | null;
 
-  createChat: (anchor: ChatAnchor, firstMessage: string, contextMode: ContextMode) => string;
+  // Replaces the in-memory chats with the chats persisted for this document.
+  // Called when the user opens a PDF from the sidebar.
+  loadChatsForDocument: (documentId: string) => Promise<void>;
+
+  createChat: (
+    documentId: string,
+    anchor: ChatAnchor,
+    firstMessage: string,
+    contextMode: ContextMode,
+  ) => string;
   addMessage: (chatId: string, role: 'user' | 'assistant', content: string) => void;
   updateLastAssistantMessage: (chatId: string, content: string) => void;
   markResponseStarted: (chatId: string) => void;
@@ -21,13 +31,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   chats: [],
   activeChatId: null,
 
-  createChat: (anchor, firstMessage, contextMode) => {
+  loadChatsForDocument: async (documentId) => {
+    const chats = await repo.listChats(documentId);
+    set({ chats, activeChatId: null });
+  },
+
+  createChat: (documentId, anchor, firstMessage, contextMode) => {
     const id = generateId();
     const now = new Date();
     const title = firstMessage.length > 60 ? firstMessage.slice(0, 60) + '...' : firstMessage;
     const chat: Chat = {
       id,
-      documentId: 'current',
+      documentId,
       anchor,
       title,
       messages: [
@@ -40,6 +55,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       updatedAt: now,
     };
     set((s) => ({ chats: [...s.chats, chat], activeChatId: id }));
+    // Fire-and-forget: persist the new chat + first message.
+    void repo.createChat(chat);
     return id;
   },
 
@@ -53,6 +70,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           : c
       ),
     }));
+    void repo.appendMessage(chatId, msg);
   },
 
   markResponseStarted: (chatId) => {
@@ -61,6 +79,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         c.id === chatId ? { ...c, needsResponse: false } : c
       ),
     }));
+    void repo.markResponseStarted(chatId);
   },
 
   updateLastAssistantMessage: (chatId, content) => {
@@ -75,6 +94,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return { ...c, messages: msgs, updatedAt: new Date() };
       }),
     }));
+    // Throttling the persisted writes would be nice, but streaming chunks are
+    // small and infrequent in practice. Fire-and-forget keeps UI snappy.
+    void repo.updateLastAssistantMessage(chatId, content);
   },
 
   setActiveChat: (chatId) => set({ activeChatId: chatId }),
