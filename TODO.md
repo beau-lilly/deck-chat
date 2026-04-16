@@ -98,6 +98,11 @@
 - [x] New folder creates "untitled folder" (auto-numbered on collision) and opens the editor on the new row
 - [x] PDF rename pre-selects the basename so the `.pdf` extension stays intact
 
+### 4.B.6 — Drag-and-drop moves (DONE)
+- [x] Drag folders and PDFs onto folders to move them; target highlights on hover
+- [x] Root is a drop target but not a drag source; cycles (folder → its own descendant) are rejected at UI and repo layers
+- [x] Counter-based dragenter/dragleave tracking for Safari-safe hover highlighting
+
 ### 4.C — Folder & file CRUD (TODO)
 - [ ] Rename folder / rename document (context menu or inline)
 - [ ] Move document to another folder (picker)
