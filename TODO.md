@@ -82,6 +82,11 @@
 - [x] Filter dropdown (All / Folders only / Files only) with indicator dot when narrowed
 - [x] Escape or clear button resets the search; clicking outside closes the filter menu
 
+### 4.B.3 — Cleaner sidebar chrome (DONE)
+- [x] Dropped the "Files" header; search bar is the topmost element
+- [x] Root folder is always expanded — no chevron to collapse it
+- [x] Per-folder hover actions for new-folder and upload, scoped to the row
+
 ### 4.C — Folder & file CRUD (TODO)
 - [ ] Rename folder / rename document (context menu or inline)
 - [ ] Move document to another folder (picker)
