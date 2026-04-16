@@ -93,6 +93,11 @@
 - [x] Cross-browser right-click: native capture-phase listeners + document-level preventDefault on mousedown(button=2) and contextmenu
 - [x] Hover-visible ⋮ kebab button as a guaranteed fallback when extensions (StopTheMadness, etc.) hijack right-click
 
+### 4.B.5 — Inline rename + new-folder flow (DONE)
+- [x] Rename uses an in-row editor (auto-focus, pre-selected text, Enter/blur to commit, Escape to cancel)
+- [x] New folder creates "untitled folder" (auto-numbered on collision) and opens the editor on the new row
+- [x] PDF rename pre-selects the basename so the `.pdf` extension stays intact
+
 ### 4.C — Folder & file CRUD (TODO)
 - [ ] Rename folder / rename document (context menu or inline)
 - [ ] Move document to another folder (picker)
