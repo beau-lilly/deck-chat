@@ -1,9 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import { useFolders, useAllDocuments } from '../../data/liveQueries';
 import { useLibrarianStore } from '../../stores/librarianStore';
+import { useLayoutStore } from '../../stores/layoutStore';
 import { ROOT_FOLDER_ID, type DocumentRecord, type Folder } from '../../types';
 import FolderNode from './FolderNode';
 import SearchBar from './SearchBar';
+import ResizeHandle from '../layout/ResizeHandle';
 
 export default function Sidebar() {
   const folders = useFolders();
@@ -12,6 +14,8 @@ export default function Sidebar() {
   const selectedFolderId = useLibrarianStore((s) => s.selectedFolderId);
   const sidebarOpen = useLibrarianStore((s) => s.sidebarOpen);
   const search = useLibrarianStore((s) => s.search);
+  const sidebarWidth = useLayoutStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useLayoutStore((s) => s.setSidebarWidth);
 
   const query = search.trim().toLowerCase();
   const searching = query.length > 0;
@@ -147,7 +151,10 @@ export default function Sidebar() {
   const showFiles = filter === 'all' || filter === 'files';
 
   return (
-    <div className="w-64 h-full bg-slate-900 border-r border-slate-700 flex flex-col shrink-0">
+    <div
+      style={{ width: `${sidebarWidth}px` }}
+      className="relative h-full bg-slate-900 border-r border-slate-700 flex flex-col shrink-0"
+    >
       <div className="px-3 py-2 border-b border-slate-800">
         <SearchBar />
       </div>
@@ -182,6 +189,8 @@ export default function Sidebar() {
           {folders.find((f) => f.id === selectedFolderId)?.name ?? '/'}
         </span>
       </div>
+
+      <ResizeHandle side="right" width={sidebarWidth} onChange={setSidebarWidth} />
     </div>
   );
 }
