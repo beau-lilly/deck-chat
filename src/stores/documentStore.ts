@@ -16,6 +16,11 @@ interface DocumentState {
   scale: number;
   pageTexts: string[];
   textExtractionDone: boolean;
+  // Monotonic counter — bumped by `triggerCenter()` to ask the viewer to
+  // recenter + scroll to top. The viewer subscribes to changes on this
+  // value rather than taking a ref/imperative handle, which keeps the
+  // store as the single source of truth for cross-component commands.
+  centerTrigger: number;
 
   // Transient upload path — used when a file has been picked but not yet
   // persisted (e.g. before repo.createDocument finishes, or for sessions that
@@ -33,6 +38,9 @@ interface DocumentState {
   setScale: (scale: number) => void;
   setPageTexts: (texts: string[]) => void;
   clearDocument: () => void;
+  // Ask the viewer to recenter horizontally and scroll to the top of
+  // the document.
+  triggerCenter: () => void;
 }
 
 export const useDocumentStore = create<DocumentState>((set, get) => ({
@@ -44,6 +52,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   scale: 1.0,
   pageTexts: [],
   textExtractionDone: false,
+  centerTrigger: 0,
 
   setPdfFile: (file: File) => {
     const prev = get().pdfUrl;
@@ -104,4 +113,6 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       textExtractionDone: false,
     });
   },
+
+  triggerCenter: () => set((s) => ({ centerTrigger: s.centerTrigger + 1 })),
 }));
