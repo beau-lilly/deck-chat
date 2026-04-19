@@ -152,3 +152,6 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 
 ### 7.D — Animated pan + fit-width zoom on chat open (DONE)
 - [x] Clicking a chat glides the canvas (300 ms ease-out cubic) to a fit-width view — page centered between the sidebars, anchor vertically centered, canvas re-renders crisp at the target scale on animation end
+
+### 7.E — Center + scroll-to-top toolbar button (DONE)
+- [x] LocateFixed icon in the toolbar zoom cluster; bumps a monotonic `centerTrigger` counter in documentStore which the PdfViewer subscribes to and runs its centering helper on
