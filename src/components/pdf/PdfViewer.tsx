@@ -306,29 +306,39 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       commitTimer = window.setTimeout(commit, COMMIT_DEBOUNCE_MS);
     };
 
-    // --- initial centering --------------------------------------------
-    // pdf.js renders async, so canvas.offsetWidth is 0 for a few frames
-    // after mount. Keep checking each frame until pages materialize, then
-    // center horizontally and anchor near the top.
-    // pdf.js renders async, so canvas.offsetWidth is 0 or partial for
-    // a few frames after mount. We wait until the DOM has actually
-    // started laying out pages, then center using our KNOWN target
-    // `pageWidth` (not offsetWidth, which can still be mid-render).
+    // --- centering helper --------------------------------------------
+    // Horizontally centers the pages in the viewport at the current
+    // visual zoom and scrolls to the top of the document. Used both for
+    // the one-shot initial centering after mount and by the toolbar's
+    // "center" button (via the centerTrigger subscription below).
+    const centerView = (): boolean => {
+      const firstPage = canvas.querySelector('[data-page]') as HTMLElement | null;
+      if (!firstPage || firstPage.offsetWidth <= 0) return false;
+      const vw = viewport.clientWidth;
+      // Visual page width accounts for any in-flight CSS zoom preview.
+      // In the committed-scale (no-gesture) case visualZoomRef is 1 so
+      // this reduces to the canvas-layout width.
+      const visualPageWidth =
+        (pageWidthRef.current || firstPage.offsetWidth) * visualZoomRef.current;
+      txRef.current = (vw - visualPageWidth) / 2;
+      tyRef.current = 24;
+      clampPan();
+      applyTransform();
+      return true;
+    };
+
+    // --- initial centering -------------------------------------------
+    // pdf.js renders async, so canvas.offsetWidth is 0 or partial for a
+    // few frames after mount. Retry each frame until centerView()
+    // succeeds (i.e., a page element with non-zero layout exists).
     const initFrameIds: number[] = [];
     const tryInitialCenter = () => {
       if (hasInitializedRef.current) return;
-      // Need at least one page in the DOM to know the layout has started.
-      const firstPage = canvas.querySelector('[data-page]') as HTMLElement | null;
-      if (!firstPage || firstPage.offsetWidth <= 0) {
+      if (!centerView()) {
         initFrameIds.push(requestAnimationFrame(tryInitialCenter));
         return;
       }
-      const vw = viewport.clientWidth;
-      const cw = pageWidthRef.current || firstPage.offsetWidth;
-      txRef.current = Math.max(0, (vw - cw) / 2);
-      tyRef.current = 24;
       hasInitializedRef.current = true;
-      applyTransform();
     };
     initFrameIds.push(requestAnimationFrame(tryInitialCenter));
 
@@ -411,6 +421,9 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
     // the toolbar's "Page n / N" readout stays current.
     const unsubStore = useDocumentStore.subscribe((s, prev) => {
       if (s.scale !== prev.scale) schedulePageTrack();
+      // centerTrigger is a monotonic counter bumped by the toolbar's
+      // center button; any change → recenter the view.
+      if (s.centerTrigger !== prev.centerTrigger) centerView();
     });
 
     // --- pan to active chat's anchor ---------------------------------
