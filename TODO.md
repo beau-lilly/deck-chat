@@ -155,3 +155,6 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 
 ### 7.E — Center + scroll-to-top toolbar button (DONE)
 - [x] LocateFixed icon in the toolbar zoom cluster; bumps a monotonic `centerTrigger` counter in documentStore which the PdfViewer subscribes to and runs its centering helper on
+
+### 7.F — FIT/PAN mode split + auto-recenter everywhere (DONE)
+- [x] FIT mode (page fits): horizontal locked, snap-to-center; PAN mode (zoomed in): 0.2/0.4 smoothstep axis-lock, strict edge bounds so the page never pans off-viewport; zoomBy clamps every step. Auto-recenter on pdfUrl change, scale change, and viewport resize. Manual center button removed (now redundant). Tightened EmptyState centering + sidebar max to 300 px.
