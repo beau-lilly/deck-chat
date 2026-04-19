@@ -135,3 +135,11 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 - [ ] Search across all chats / documents
 - [ ] Starred / recently-opened documents
 - [ ] Per-document tags
+
+## Phase 7: PDF viewer canvas
+### 7.A — Transform-based pan + zoom (DONE)
+- [x] Replaced native scroll container with fixed viewport + CSS-transform canvas (Figma/Miro/claude.ai/design pattern)
+- [x] Free-form two-axis trackpad panning with soft axis-lock (smoothstep deadzone) — tunable from fully-free to pure orthogonal
+- [x] Smooth pinch/Cmd+wheel zoom via CSS-transform preview during gesture, committed to react-pdf canvas on debounce / Safari gestureend
+- [x] Cursor-anchored zoom; zoom buttons + MIN/MAX/STEP constants; click-to-reset-to-100% on the percentage readout
+- [x] Fixed text highlighting (removed inherited `user-select: none` that was killing pdf.js text layer)

@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { repo } from '../data/repo';
 
+// Zoom bounds — shared between toolbar buttons and wheel/pinch handlers so
+// both respect the same range.
+export const MIN_SCALE = 0.25;
+export const MAX_SCALE = 4.0;
+export const SCALE_STEP = 0.1;
+
 interface DocumentState {
   activeDocumentId: string | null;
   pdfFile: File | null;
