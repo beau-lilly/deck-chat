@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { Upload, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft } from 'lucide-react';
-import { useDocumentStore } from '../../stores/documentStore';
+import { useDocumentStore, MIN_SCALE, MAX_SCALE, SCALE_STEP } from '../../stores/documentStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSelectionStore, type SelectionTool } from '../../stores/selectionStore';
 import { useLibrarianStore } from '../../stores/librarianStore';
@@ -106,17 +106,25 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
 
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setScale(Math.max(0.5, scale - 0.1))}
-              className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors"
+              onClick={() => setScale(Math.max(MIN_SCALE, scale - SCALE_STEP))}
+              className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+              disabled={scale <= MIN_SCALE + 1e-6}
+              title="Zoom out"
             >
               <ZoomOut size={14} />
             </button>
-            <span className="text-xs text-slate-400 w-10 text-center">
-              {Math.round(scale * 100)}%
-            </span>
             <button
-              onClick={() => setScale(Math.min(2.0, scale + 0.1))}
-              className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors"
+              onClick={() => setScale(1)}
+              className="text-xs text-slate-400 hover:text-slate-200 w-10 text-center transition-colors"
+              title="Reset zoom"
+            >
+              {Math.round(scale * 100)}%
+            </button>
+            <button
+              onClick={() => setScale(Math.min(MAX_SCALE, scale + SCALE_STEP))}
+              className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+              disabled={scale >= MAX_SCALE - 1e-6}
+              title="Zoom in"
             >
               <ZoomIn size={14} />
             </button>
