@@ -162,7 +162,100 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       });
     };
 
+    // In-flight pan animation (set by animatePanTo below). Any manual
+    // pan/zoom cancels it so the user's input has immediate effect
+    // rather than fighting an ongoing interpolation.
+    let panAnimRafId: number | null = null;
+    const cancelPanAnim = () => {
+      if (panAnimRafId !== null) {
+        cancelAnimationFrame(panAnimRafId);
+        panAnimRafId = null;
+      }
+    };
+
+    // Smoothly tween tx/ty (and optionally visualZoom) from their
+    // current values to the target over `durationMs`, ease-out cubic —
+    // motion starts fast and decelerates into the destination.
+    //
+    // The math works out that if tx, ty, and visualZoom all share the
+    // same easing function, any content point's viewport position at
+    // time `t` is exactly the linear interpolation (with the same ease)
+    // between its start and end viewport positions. So if the caller
+    // chose (targetTx, targetTy) such that a specific anchor lands at
+    // viewport center at the target zoom, the anchor glides straight
+    // toward that center throughout the animation — no drift, no need
+    // to recompute tx/ty per frame from the anchor.
+    //
+    // When targetZoom differs from current, we also run the pinch/wheel
+    // commit pipeline at animation end: the visualZoom gets rolled into
+    // react-pdf's canvas width for a single crisp rebuild at the new
+    // scale, and visualZoom resets to 1. tx/ty can stay put because the
+    // canvas grows/shrinks by exactly the committed factor.
+    const animatePanTo = (
+      rawTx: number,
+      rawTy: number,
+      targetZoom: number = visualZoomRef.current,
+      durationMs = 300,
+    ) => {
+      cancelPanAnim();
+
+      // Pre-clamp the target at the target zoom level, then read it
+      // back. Temporary writes are restored before we start the tween.
+      const startTx = txRef.current;
+      const startTy = tyRef.current;
+      const startZoom = visualZoomRef.current;
+      txRef.current = rawTx;
+      tyRef.current = rawTy;
+      visualZoomRef.current = targetZoom;
+      clampPan();
+      const targetTx = txRef.current;
+      const targetTy = tyRef.current;
+      txRef.current = startTx;
+      tyRef.current = startTy;
+      visualZoomRef.current = startZoom;
+
+      const zoomChanging = Math.abs(targetZoom - startZoom) >= 0.01;
+
+      // Already at target → snap and skip the tween.
+      if (
+        Math.abs(targetTx - startTx) < 1 &&
+        Math.abs(targetTy - startTy) < 1 &&
+        !zoomChanging
+      ) {
+        txRef.current = targetTx;
+        tyRef.current = targetTy;
+        visualZoomRef.current = targetZoom;
+        applyTransform();
+        // Still commit if we're arriving at a non-1 zoom (e.g. a second
+        // same-anchor click after the first commit hasn't run yet).
+        if (targetZoom !== 1) commit();
+        return;
+      }
+
+      const startTime = performance.now();
+      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - startTime) / durationMs);
+        const e = easeOutCubic(t);
+        txRef.current = startTx + (targetTx - startTx) * e;
+        tyRef.current = startTy + (targetTy - startTy) * e;
+        visualZoomRef.current = startZoom + (targetZoom - startZoom) * e;
+        applyTransform();
+        if (t < 1) {
+          panAnimRafId = requestAnimationFrame(tick);
+        } else {
+          panAnimRafId = null;
+          // Commit the visualZoom into the canvas scale for crisp text
+          // if we changed zoom. No-op if visualZoom ended at 1.
+          if (zoomChanging) commit();
+        }
+      };
+      panAnimRafId = requestAnimationFrame(tick);
+    };
+
     const panBy = (dx: number, dy: number) => {
+      cancelPanAnim();
       txRef.current += dx;
       tyRef.current += dy;
       clampPan();
@@ -176,6 +269,7 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
     //   ->      tx_new = cx - (cx - tx_old) * z_new / z_old
     //                  = cx + (tx_old - cx) * z_new / z_old
     const zoomBy = (factor: number, cx: number, cy: number) => {
+      cancelPanAnim();
       const oldZoom = visualZoomRef.current;
       const committed = useDocumentStore.getState().scale;
       const clampedCombined = Math.max(
@@ -348,15 +442,37 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
         // pre-transform).
         const centerXInCanvas = pageEl.offsetLeft + centerXInPage;
         const centerYInCanvas = pageEl.offsetTop + centerYInPage;
-        // Place that center at the viewport's center, respecting the
-        // current visual zoom.
+        // Fit-width target zoom: the page's visual width lands just
+        // inside the viewport with a small breathing margin on each
+        // side. Clamped to the global [MIN_SCALE, MAX_SCALE] combined
+        // scale. We convert that fit into a `visualZoom` relative to
+        // the current committed canvas scale — the commit that fires
+        // at the end of the animation will roll it into the canvas.
         const vw = viewport.clientWidth;
         const vh = viewport.clientHeight;
-        const z = visualZoomRef.current;
-        txRef.current = vw / 2 - centerXInCanvas * z;
-        tyRef.current = vh / 2 - centerYInCanvas * z;
-        clampPan();
-        applyTransform();
+        const FIT_MARGIN = 48; // 24 px each side; keeps page off the sidebars
+        const committed = useDocumentStore.getState().scale;
+        const rawFitVisualZoom = (vw - FIT_MARGIN) / pageEl.offsetWidth;
+        const combinedClamped = Math.max(
+          MIN_SCALE,
+          Math.min(MAX_SCALE, committed * rawFitVisualZoom),
+        );
+        const targetZoom = combinedClamped / committed;
+
+        // Horizontal target: center the PAGE (not the anchor) between
+        // the sidebars. All pages have offsetLeft=0 because react-pdf
+        // left-aligns them within the Document wrapper, so the page
+        // midpoint is just offsetWidth/2.
+        //
+        // Vertical target: place the anchor's center at the viewport
+        // center so it's clearly visible; the page can scroll above or
+        // below. animatePanTo's same-easing guarantee means the page
+        // glides smoothly to its centered position and the anchor lands
+        // in view as the zoom resolves.
+        const pageMidXInCanvas = pageEl.offsetLeft + pageEl.offsetWidth / 2;
+        const targetTx = vw / 2 - pageMidXInCanvas * targetZoom;
+        const targetTy = vh / 2 - centerYInCanvas * targetZoom;
+        animatePanTo(targetTx, targetTy, targetZoom);
       };
       attempt();
     };
@@ -376,6 +492,7 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       if (commitTimer !== null) clearTimeout(commitTimer);
       if (pageTrackRafId !== null) cancelAnimationFrame(pageTrackRafId);
       for (const id of initFrameIds) cancelAnimationFrame(id);
+      cancelPanAnim();
       viewport.removeEventListener('wheel', onWheel);
       viewport.removeEventListener('gesturestart', onGestureStart);
       viewport.removeEventListener('gesturechange', onGestureChange);
