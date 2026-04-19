@@ -51,3 +51,87 @@
 - [ ] Free trial tier (limited messages/month)
 - [ ] Subscription tier (unlimited or higher limits)
 - [ ] Usage tracking and metering
+
+## Phase 4: Left Sidebar + Library Persistence
+### 4.A — Data model + Dexie persistence (DONE)
+- [x] Add `Folder` and `DocumentRecord` types; keep `Chat` shape for UI
+- [x] Dexie schema v1: `folders`, `documents`, `blobs`, `chats`, `messages`
+- [x] Repository layer (`src/data/repo.ts`) — single seam for future REST swap
+- [x] Store PDF bytes as Blob so refresh fully rehydrates documents
+- [x] Split `messages` into their own table for cheap streaming appends
+- [x] `documentStore.openDocument(id)` rehydrates the active document from Dexie
+- [x] `chatStore.loadChatsForDocument(id)` and all mutations persist via repo
+
+### 4.B — Left sidebar UI (DONE)
+- [x] Collapsible left sidebar with `/` root folder and tree view
+- [x] Folder / File filter toggle (All / Folders / Files)
+- [x] Click a PDF to open it; chats swap to that document
+- [x] Upload via sidebar or toolbar — lands in the currently-selected folder
+- [x] New-folder button in sidebar header
+- [x] Upload-target footer so users see where the next PDF will go
+
+### 4.B.1 — Chat list under each PDF (DONE)
+- [x] Each PDF row in the sidebar has a chevron to expand its chats
+- [x] Chats sort by anchor position: page ASC, then y ASC, then x ASC
+- [x] Click a chat to open its document and activate it
+- [x] `useChatsForDocument` liveQuery only mounts when a doc is expanded
+
+### 4.B.2 — Search bar + filter dropdown (DONE)
+- [x] Replaced All/Folders/Files pills with a search input + sliders icon dropdown
+- [x] Search filters folders and documents by name; ancestors force-expand so matches stay reachable
+- [x] Filter dropdown (All / Folders only / Files only) with indicator dot when narrowed
+- [x] Escape or clear button resets the search; clicking outside closes the filter menu
+
+### 4.B.3 — Cleaner sidebar chrome (DONE)
+- [x] Dropped the "Files" header; search bar is the topmost element
+- [x] Root folder is always expanded — no chevron to collapse it
+- [x] Per-folder hover actions for new-folder and upload, scoped to the row
+
+### 4.B.4 — Context menus for folders and PDFs (DONE)
+- [x] Right-click folder → New folder / Upload / Rename / Delete (root omits Rename+Delete)
+- [x] Right-click PDF → Rename / Delete; clears viewer state if the deleted doc is open
+- [x] Cross-browser right-click: native capture-phase listeners + document-level preventDefault on mousedown(button=2) and contextmenu
+- [x] Hover-visible ⋮ kebab button as a guaranteed fallback when extensions (StopTheMadness, etc.) hijack right-click
+
+### 4.B.5 — Inline rename + new-folder flow (DONE)
+- [x] Rename uses an in-row editor (auto-focus, pre-selected text, Enter/blur to commit, Escape to cancel)
+- [x] New folder creates "untitled folder" (auto-numbered on collision) and opens the editor on the new row
+- [x] PDF rename pre-selects the basename so the `.pdf` extension stays intact
+
+### 4.B.6 — Drag-and-drop moves (DONE)
+- [x] Drag folders and PDFs onto folders to move them; target highlights on hover
+- [x] Root is a drop target but not a drag source; cycles (folder → its own descendant) are rejected at UI and repo layers
+- [x] Counter-based dragenter/dragleave tracking for Safari-safe hover highlighting
+
+### 4.B.7 — Resizable sidebars (DONE)
+- [x] Drag the inner edge of the left sidebar or right chat panel to resize
+- [x] Widths clamped (sidebar 180–640 px, chat panel 260–800 px) and persisted in localStorage
+
+### 4.C — Folder & file CRUD (TODO)
+- [ ] Rename folder / rename document (context menu or inline)
+- [ ] Move document to another folder (picker)
+- [ ] Delete folder (cascading) with confirm dialog
+- [ ] Delete document (cascading chats + blobs)
+- [ ] Drag-and-drop: drop `.pdf` onto folder to upload there
+- [ ] Drag-and-drop: drag doc node onto folder to move
+
+### 4.D — Library settings (TODO)
+- [ ] Export / import library (zip of PDFs + metadata JSON)
+- [ ] Storage usage indicator (MB used by blobs)
+- [ ] "Clear all" with double confirm
+
+## Phase 5: Server-backed Library (future)
+Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI code should need to change.
+- [ ] Node server (Express or Hono) exposing the `Repo` verbs over REST
+- [ ] Persist PDFs to filesystem or S3; metadata in SQLite/Postgres
+- [ ] `RestRepo` client; env flag selects `DexieRepo` vs `RestRepo`
+- [ ] Auth (email/password or OAuth); user id scopes every query
+- [ ] HTTP-only cookie sessions
+- [ ] Optional offline cache: Dexie as a write-through layer over REST
+- [ ] Shareable links per folder / per PDF
+- [ ] Migrate `blobs` table to object storage before scale
+
+## Phase 6: Library + Chat UX polish (nice-to-have)
+- [ ] Search across all chats / documents
+- [ ] Starred / recently-opened documents
+- [ ] Per-document tags

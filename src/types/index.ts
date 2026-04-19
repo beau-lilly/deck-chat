@@ -30,11 +30,24 @@ export interface Chat {
   updatedAt: Date;
 }
 
-export interface DocumentMeta {
+export const ROOT_FOLDER_ID = 'root';
+
+export interface Folder {
+  id: string;            // uuid; ROOT_FOLDER_ID is reserved for "/"
+  name: string;          // "/" for root, otherwise user-entered
+  parentId: string | null; // null only for root
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface DocumentRecord {
   id: string;
+  folderId: string;
   name: string;
   pageCount: number;
+  sizeBytes: number;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface NavigationEntry {
