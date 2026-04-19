@@ -354,10 +354,14 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
   return (
     <div
       ref={viewportRef}
-      className="h-full overflow-hidden relative bg-slate-950 select-none"
+      className="h-full overflow-hidden relative bg-slate-950"
       // touch-action: none → browser forwards all gestures to JS (needed
       // for smooth pinch/two-finger pan on touch). overscroll-behavior:
       // contain → prevents bounce from leaking to the parent.
+      // We deliberately DO NOT set user-select:none here — doing so would
+      // cascade to the pdf.js text layer and break drag-to-highlight text
+      // selection. Panning is wheel/pinch only, so there's no mouse-drag
+      // conflict to guard against.
       style={{ touchAction: 'none', overscrollBehavior: 'contain' }}
     >
       <div
