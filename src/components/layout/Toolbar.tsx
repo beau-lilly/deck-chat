@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Upload, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft, LocateFixed } from 'lucide-react';
+import { Upload, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft } from 'lucide-react';
 import { useDocumentStore, MIN_SCALE, MAX_SCALE, SCALE_STEP } from '../../stores/documentStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSelectionStore, type SelectionTool } from '../../stores/selectionStore';
@@ -40,7 +40,7 @@ function SelectionToolToggle() {
 
 export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { pdfFile, pageCount, currentPage, scale, setScale, triggerCenter } = useDocumentStore();
+  const { pdfFile, pageCount, currentPage, scale, setScale } = useDocumentStore();
   const sidebarOpen = useLibrarianStore((s) => s.sidebarOpen);
   const setSidebarOpen = useLibrarianStore((s) => s.setSidebarOpen);
 
@@ -127,13 +127,6 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
               title="Zoom in"
             >
               <ZoomIn size={14} />
-            </button>
-            <button
-              onClick={() => triggerCenter()}
-              className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors"
-              title="Center and scroll to top"
-            >
-              <LocateFixed size={14} />
             </button>
           </div>
 

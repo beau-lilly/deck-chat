@@ -8,7 +8,7 @@ const STORAGE_KEY = 'deck-chat-layout';
 
 export const SIDEBAR_DEFAULT = 256; // matches the old Tailwind w-64
 export const SIDEBAR_MIN = 180;
-export const SIDEBAR_MAX = 640;
+export const SIDEBAR_MAX = 300;
 
 export const CHAT_PANEL_DEFAULT = 384; // matches the old Tailwind w-96
 export const CHAT_PANEL_MIN = 260;

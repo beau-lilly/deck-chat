@@ -37,6 +37,14 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
   const tyRef = useRef(0);
   const visualZoomRef = useRef(1);
   const hasInitializedRef = useRef(false);
+  // Exposed from inside the main useEffect so the pdfUrl-change effect
+  // can kick off a fresh centering loop without duplicating state or
+  // re-binding all the event listeners the main effect owns.
+  const kickInitialCenterRef = useRef<() => void>(() => {});
+  // Same idea for viewport-resize rebalancing: the container-width
+  // effect below calls this to re-apply mode-aware bounds (clampPan +
+  // applyTransform) when the user drags a sidebar.
+  const rebalanceRef = useRef<() => void>(() => {});
   // Mirrors the `pageWidth` the render function passes to react-pdf, so
   // initial centering can use the target width without waiting for pdf.js
   // to finish laying out the first page (whose offsetWidth is 0 or
@@ -67,11 +75,28 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
     console.log(`[Deck Chat] Extracted text from ${pdf.numPages} pages (${texts.reduce((a, t) => a + t.length, 0)} chars total)`);
   }, [setPageCount, setPageTexts]);
 
-  // Reset the "have we centered?" flag when a new document loads so the
-  // next render re-centers it.
+  // Reset the "have we centered?" flag and kick off a fresh centering
+  // retry loop whenever a new document loads. The main useEffect below
+  // only runs once (empty deps, so its event listeners stay stable
+  // across document changes); we need a separate effect tied to pdfUrl
+  // to re-trigger the centering it owns, via the ref it exposed.
   useEffect(() => {
     hasInitializedRef.current = false;
+    kickInitialCenterRef.current();
   }, [pdfUrl]);
+
+  // Rebalance the canvas when the viewport resizes (user drags a
+  // sidebar edge). Waiting one frame lets React commit the new
+  // pageWidth prop and react-pdf resize its inner Page wrapper before
+  // we read canvas.offsetWidth for the clamp. clampPan handles both
+  // modes correctly: FIT re-centers, PAN keeps tx but re-binds edges.
+  useEffect(() => {
+    if (!hasInitializedRef.current) return;
+    const rafId = requestAnimationFrame(() => {
+      rebalanceRef.current();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [containerWidth]);
 
   // All pan/zoom / page-tracking wiring. Runs once on mount; handlers
   // read current scale etc. via `useDocumentStore.getState()` so the
@@ -88,30 +113,42 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
     let pageTrackRafId: number | null = null;
 
     // --- axis snap ----------------------------------------------------
-    // Per-event deadzone for the off-axis component: if one delta is
-    // much smaller than the other, damp it so near-axis gestures snap
-    // cleanly. Evaluated per wheel event (not per burst) so the user
-    // can smoothly transition between horizontal, diagonal, and vertical
-    // motion within a single gesture.
+    // Scroll / pan behavior is mode-dependent on whether the page's
+    // visual width fits inside the viewport (between the sidebars):
     //
+    //   FIT mode (page width ≤ viewport width):
+    //     The page already fits horizontally, so there's nothing to pan
+    //     sideways. We lock horizontal motion entirely (dx zeroed) and
+    //     leave vertical untouched — the user just scrolls through the
+    //     document like a normal reader. clampPan() below additionally
+    //     forces tx to dead-center the page.
+    //
+    //   PAN mode (page width > viewport width — user has zoomed in):
+    //     Horizontal pan is needed to see the hidden edges, so we allow
+    //     free 2D scrolling with a soft axis lock (smoothstep deadzone
+    //     at ratio 0.20 → 0.40) that snaps near-axis gestures without
+    //     killing diagonals. clampPan() restricts tx to the range where
+    //     the page still fully covers the viewport (no pan-past-edge).
+    //
+    // smoothstep ramp for the soft-lock case:
     //   ratio = |smallerAxis| / |largerAxis|
     //   ratio ≤ SNAP_DEAD → smaller axis is zeroed (snap to dominant)
     //   ratio ≥ SNAP_SOFT → full pass-through (free 2D pan)
-    //   in between        → smoothstep ramp (no visible snap threshold)
-    //
-    // Tuning:
-    //   SNAP_DEAD=SNAP_SOFT=1.0 → pure axis lock. Every wheel event has
-    //   its smaller-axis delta zeroed out, so the pan is always
-    //   orthogonal (purely horizontal or purely vertical) regardless of
-    //   the gesture angle. This is the maximum snap this model allows —
-    //   going further would require flipping to a different strategy.
-    const SNAP_DEAD = 1.0;
-    const SNAP_SOFT = 1.0;
-    const axisSnapMultiplier = (ratio: number): number => {
-      if (ratio <= SNAP_DEAD) return 0;
-      if (ratio >= SNAP_SOFT) return 1;
-      const t = (ratio - SNAP_DEAD) / (SNAP_SOFT - SNAP_DEAD);
-      return t * t * (3 - 2 * t); // smoothstep
+    //   in between        → smoothstep (no perceptible boundary)
+    const SNAP_DEAD_PAN = 0.2;
+    const SNAP_SOFT_PAN = 0.4;
+    const panModeAxisSnap = (ratio: number): number => {
+      if (ratio <= SNAP_DEAD_PAN) return 0;
+      if (ratio >= SNAP_SOFT_PAN) return 1;
+      const t = (ratio - SNAP_DEAD_PAN) / (SNAP_SOFT_PAN - SNAP_DEAD_PAN);
+      return t * t * (3 - 2 * t);
+    };
+
+    // Helper: is the page currently narrow enough to fit fully within the
+    // viewport horizontally? Determines FIT vs PAN mode.
+    const isPageFitHorizontally = () => {
+      const cw = canvas.offsetWidth * visualZoomRef.current;
+      return cw <= viewport.clientWidth;
     };
 
     // --- core: transform + page tracking ------------------------------
@@ -120,19 +157,36 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       schedulePageTrack();
     };
 
-    // Rough bounds: viewport size vs content size × current visual zoom,
-    // plus PAN_MARGIN so the user can swing slightly past the edges.
+    // Mode-aware bounds clamp.
+    //
+    //   FIT mode (cw ≤ vw):
+    //     Horizontal is locked — tx must keep the page dead-center.
+    //     Vertical keeps the existing PAN_MARGIN slack so the user can
+    //     over-scroll slightly (feels more forgiving).
+    //
+    //   PAN mode (cw > vw):
+    //     Horizontal bounds are STRICT (no slack): the page must fully
+    //     cover the viewport horizontally at all times, so tx lives
+    //     in [vw - cw, 0] — the two extremes being "page right edge
+    //     flush to viewport right" and "page left edge flush to viewport
+    //     left". Vertical still has its slack.
     const clampPan = () => {
       const vw = viewport.clientWidth;
       const vh = viewport.clientHeight;
       const cw = canvas.offsetWidth * visualZoomRef.current;
       const ch = canvas.offsetHeight * visualZoomRef.current;
       const slack = PAN_MARGIN;
+
       if (cw <= vw) {
-        txRef.current = Math.max(-slack, Math.min(vw - cw + slack, txRef.current));
+        // FIT mode — lock the page to horizontal center, no pan allowed.
+        txRef.current = (vw - cw) / 2;
       } else {
-        txRef.current = Math.max(vw - cw - slack, Math.min(slack, txRef.current));
+        // PAN mode — strict edges, no slack. Page must always cover the
+        // viewport horizontally.
+        txRef.current = Math.max(vw - cw, Math.min(0, txRef.current));
       }
+
+      // Vertical keeps slack — long documents need room to over-scroll.
       if (ch <= vh) {
         tyRef.current = Math.max(-slack, Math.min(vh - ch + slack, tyRef.current));
       } else {
@@ -282,6 +336,15 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       txRef.current = cx + (txRef.current - cx) * actualFactor;
       tyRef.current = cy + (tyRef.current - cy) * actualFactor;
       visualZoomRef.current = newZoom;
+      // Re-apply mode-aware bounds as the zoom crosses between FIT and
+      // PAN modes. Without this the cursor-anchored tx/ty math above can
+      // leave the page in a transient out-of-bounds state (e.g. a gap
+      // between the page edge and the sidebar while zoomed in, or the
+      // page still off-center after dropping into FIT mode). Clamping
+      // per zoom step snaps the page to its valid position the instant
+      // the mode flips, instead of waiting for the next pan event or
+      // the commit debounce to correct it.
+      clampPan();
       applyTransform();
       scheduleCommit();
     };
@@ -308,39 +371,74 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
 
     // --- centering helper --------------------------------------------
     // Horizontally centers the pages in the viewport at the current
-    // visual zoom and scrolls to the top of the document. Used both for
-    // the one-shot initial centering after mount and by the toolbar's
-    // "center" button (via the centerTrigger subscription below).
-    const centerView = (): boolean => {
+    // visual zoom. By default leaves the vertical scroll position alone
+    // — the user's usually centering because the page drifted sideways
+    // and they don't want to jump back to page 1. `resetVertical: true`
+    // is used only by the initial mount centering below.
+    const centerView = ({ resetVertical = false } = {}): boolean => {
       const firstPage = canvas.querySelector('[data-page]') as HTMLElement | null;
-      if (!firstPage || firstPage.offsetWidth <= 0) return false;
+      if (!firstPage) return false;
+      const pageW = firstPage.offsetWidth;
+      if (pageW <= 0) return false;
       const vw = viewport.clientWidth;
-      // Visual page width accounts for any in-flight CSS zoom preview.
-      // In the committed-scale (no-gesture) case visualZoomRef is 1 so
-      // this reduces to the canvas-layout width.
-      const visualPageWidth =
-        (pageWidthRef.current || firstPage.offsetWidth) * visualZoomRef.current;
+      if (vw <= 0) return false;
+
+      // Wait for the DOM-reported page width to match the width we
+      // just asked react-pdf to render at. On first mount the
+      // useResizeObserver hook boots at a default of 800 px before
+      // the ResizeObserver delivers the real width asynchronously,
+      // which forces a render with a stale pageWidth followed by a
+      // re-render at the correct one. If we center in that window,
+      // `pageWidthRef.current` (the target) and `firstPage.offsetWidth`
+      // (current DOM) disagree — `clampPan` uses `canvas.offsetWidth`
+      // which is stale, so `tx` ends up pinned to a value that's wrong
+      // for the canvas's final rendered size. Retrying until they
+      // agree avoids the one-off off-center on first PDF load.
+      const targetW = pageWidthRef.current;
+      if (targetW <= 0 || Math.abs(pageW - targetW) > 4) return false;
+
+      const visualPageWidth = pageW * visualZoomRef.current;
       txRef.current = (vw - visualPageWidth) / 2;
-      tyRef.current = 24;
+      if (resetVertical) tyRef.current = 24;
       clampPan();
       applyTransform();
       return true;
     };
 
-    // --- initial centering -------------------------------------------
-    // pdf.js renders async, so canvas.offsetWidth is 0 or partial for a
-    // few frames after mount. Retry each frame until centerView()
-    // succeeds (i.e., a page element with non-zero layout exists).
-    const initFrameIds: number[] = [];
-    const tryInitialCenter = () => {
-      if (hasInitializedRef.current) return;
-      if (!centerView()) {
-        initFrameIds.push(requestAnimationFrame(tryInitialCenter));
-        return;
-      }
-      hasInitializedRef.current = true;
+    // Exposed so the viewport-resize effect can re-apply mode-aware
+    // bounds when the user drags a sidebar (see the component-level
+    // useEffect above). FIT mode will re-center, PAN mode will keep
+    // the current tx but re-bind it to the new viewport edges.
+    rebalanceRef.current = () => {
+      if (!hasInitializedRef.current) return;
+      clampPan();
+      applyTransform();
     };
-    initFrameIds.push(requestAnimationFrame(tryInitialCenter));
+
+    // --- initial centering -------------------------------------------
+    // pdf.js renders async, so the first-page DOM/layout may not exist
+    // yet. We retry every frame until centerView() succeeds. Called both
+    // on mount and whenever the pdfUrl effect above detects a new
+    // document (via kickInitialCenterRef).
+    let initFrameIds: number[] = [];
+    const cancelInitFrames = () => {
+      for (const id of initFrameIds) cancelAnimationFrame(id);
+      initFrameIds = [];
+    };
+    const kickInitialCenter = () => {
+      cancelInitFrames();
+      const tryInitialCenter = () => {
+        if (hasInitializedRef.current) return;
+        if (!centerView({ resetVertical: true })) {
+          initFrameIds.push(requestAnimationFrame(tryInitialCenter));
+          return;
+        }
+        hasInitializedRef.current = true;
+      };
+      initFrameIds.push(requestAnimationFrame(tryInitialCenter));
+    };
+    kickInitialCenterRef.current = kickInitialCenter;
+    kickInitialCenter();
 
     // --- wheel --------------------------------------------------------
     const onWheel = (e: WheelEvent) => {
@@ -360,25 +458,36 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
         return;
       }
 
-      // Pan. Native overflow: auto applies strict direction locking to
-      // trackpad gestures, which makes diagonal swipes feel jerky. We do
-      // our own with a soft deadzone so near-axis gestures snap cleanly
-      // but the user can pan diagonally — and mix axes within one
-      // gesture — freely.
+      // Pan — behavior depends on FIT vs PAN mode (see axis-snap section
+      // above). In FIT mode horizontal is locked because the page
+      // already fits between the sidebars; in PAN mode we soft-snap
+      // near-axis gestures with a 0.2/0.4 smoothstep deadzone so
+      // diagonals still work.
+      const fitMode = isPageFitHorizontally();
+
       if (e.shiftKey) {
         // Classic shift+wheel convention for mouse wheels with no deltaX.
-        panBy(-e.deltaY, 0);
+        // In FIT mode there's no horizontal room, so we drop it.
+        if (!fitMode) panBy(-e.deltaY, 0);
         return;
       }
 
       let dx = e.deltaX;
       let dy = e.deltaY;
-      const absX = Math.abs(dx);
-      const absY = Math.abs(dy);
-      if (absX > 0 && absY > 0) {
-        if (absX < absY) dx *= axisSnapMultiplier(absX / absY);
-        else dy *= axisSnapMultiplier(absY / absX);
+
+      if (fitMode) {
+        // FIT mode — only vertical scroll through the document.
+        dx = 0;
+      } else {
+        // PAN mode — smoothstep axis lock with room for diagonals.
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
+        if (absX > 0 && absY > 0) {
+          if (absX < absY) dx *= panModeAxisSnap(absX / absY);
+          else dy *= panModeAxisSnap(absY / absX);
+        }
       }
+
       panBy(-dx, -dy);
     };
 
@@ -420,10 +529,20 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
     // directly on the store. Kick the page tracker when that happens so
     // the toolbar's "Page n / N" readout stays current.
     const unsubStore = useDocumentStore.subscribe((s, prev) => {
-      if (s.scale !== prev.scale) schedulePageTrack();
-      // centerTrigger is a monotonic counter bumped by the toolbar's
-      // center button; any change → recenter the view.
-      if (s.centerTrigger !== prev.centerTrigger) centerView();
+      if (s.scale !== prev.scale) {
+        schedulePageTrack();
+        // Scale changed externally (toolbar zoom buttons or the
+        // click-to-reset-100% readout). Canvas rebuilds at a new width
+        // on the next React commit, so re-running clampPan afterward
+        // re-centers the page in FIT mode or re-binds it to the
+        // sidebar edges in PAN mode — without this, the page stays at
+        // its pre-scale tx until the user's first manual pan snaps
+        // it into place.
+        requestAnimationFrame(() => {
+          clampPan();
+          applyTransform();
+        });
+      }
     });
 
     // --- pan to active chat's anchor ---------------------------------
@@ -504,7 +623,9 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
     return () => {
       if (commitTimer !== null) clearTimeout(commitTimer);
       if (pageTrackRafId !== null) cancelAnimationFrame(pageTrackRafId);
-      for (const id of initFrameIds) cancelAnimationFrame(id);
+      cancelInitFrames();
+      kickInitialCenterRef.current = () => {};
+      rebalanceRef.current = () => {};
       cancelPanAnim();
       viewport.removeEventListener('wheel', onWheel);
       viewport.removeEventListener('gesturestart', onGestureStart);
