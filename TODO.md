@@ -149,3 +149,6 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 
 ### 7.C — Type immediately into selection popup (DONE)
 - [x] Popup keeps the page text selection alive for `⌘C` copy AND accepts typing — document-level keydown routes characters into the prompt until a printable key promotes the input to real focus (see `docs/text-selection-popup-focus.md`)
+
+### 7.D — Animated pan + fit-width zoom on chat open (DONE)
+- [x] Clicking a chat glides the canvas (300 ms ease-out cubic) to a fit-width view — page centered between the sidebars, anchor vertically centered, canvas re-renders crisp at the target scale on animation end
