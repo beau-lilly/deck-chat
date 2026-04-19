@@ -4,6 +4,7 @@ import { pdfjs } from 'react-pdf';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import PdfPage from './PdfPage';
 import { useDocumentStore, MIN_SCALE, MAX_SCALE } from '../../stores/documentStore';
+import { useChatStore } from '../../stores/chatStore';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -318,6 +319,54 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       if (s.scale !== prev.scale) schedulePageTrack();
     });
 
+    // --- pan to active chat's anchor ---------------------------------
+    // When the user opens a chat, pan the canvas so the anchor is
+    // visible (centered in the viewport). Uses only the CURRENT
+    // visualZoom — doesn't try to change zoom level, just repositions.
+    // The page element for the anchor may not be in the DOM yet (pdf.js
+    // renders pages lazily), so we retry a few frames before giving up.
+    const panToActiveChatAnchor = () => {
+      const cs = useChatStore.getState();
+      if (!cs.activeChatId) return;
+      const chat = cs.chats.find((c) => c.id === cs.activeChatId);
+      if (!chat) return;
+      const anchor = chat.anchor;
+
+      let retries = 0;
+      const attempt = () => {
+        const pageEl = canvas.querySelector<HTMLElement>(
+          `[data-page="${anchor.pageNumber}"]`,
+        );
+        if (!pageEl || pageEl.offsetWidth <= 0) {
+          if (retries++ < 30) requestAnimationFrame(attempt);
+          return;
+        }
+        // Anchor center in page-local pixels (x/y/w/h are 0–100%).
+        const centerXInPage = ((anchor.x + (anchor.width ?? 0) / 2) / 100) * pageEl.offsetWidth;
+        const centerYInPage = ((anchor.y + (anchor.height ?? 0) / 2) / 100) * pageEl.offsetHeight;
+        // Anchor center in canvas-local pixels (layout coords,
+        // pre-transform).
+        const centerXInCanvas = pageEl.offsetLeft + centerXInPage;
+        const centerYInCanvas = pageEl.offsetTop + centerYInPage;
+        // Place that center at the viewport's center, respecting the
+        // current visual zoom.
+        const vw = viewport.clientWidth;
+        const vh = viewport.clientHeight;
+        const z = visualZoomRef.current;
+        txRef.current = vw / 2 - centerXInCanvas * z;
+        tyRef.current = vh / 2 - centerYInCanvas * z;
+        clampPan();
+        applyTransform();
+      };
+      attempt();
+    };
+
+    const unsubChat = useChatStore.subscribe((s, prev) => {
+      if (s.activeChatId && s.activeChatId !== prev.activeChatId) {
+        panToActiveChatAnchor();
+      }
+    });
+
     viewport.addEventListener('wheel', onWheel, { passive: false });
     viewport.addEventListener('gesturestart', onGestureStart);
     viewport.addEventListener('gesturechange', onGestureChange);
@@ -332,6 +381,7 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       viewport.removeEventListener('gesturechange', onGestureChange);
       viewport.removeEventListener('gestureend', onGestureEnd);
       unsubStore();
+      unsubChat();
     };
     // Deliberately empty deps: effect reads mutable state via refs and
     // store.getState(). Re-attaching on scale change would drop in-flight

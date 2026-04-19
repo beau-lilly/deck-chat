@@ -143,3 +143,6 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 - [x] Smooth pinch/Cmd+wheel zoom via CSS-transform preview during gesture, committed to react-pdf canvas on debounce / Safari gestureend
 - [x] Cursor-anchored zoom; zoom buttons + MIN/MAX/STEP constants; click-to-reset-to-100% on the percentage readout
 - [x] Fixed text highlighting (removed inherited `user-select: none` that was killing pdf.js text layer)
+
+### 7.B — Show active chat's anchor on the PDF (DONE)
+- [x] Pulsing overlay on the anchor page (indigo ring for regions, amber highlighter for text); PdfViewer auto-pans so the anchor lands in the viewport center
