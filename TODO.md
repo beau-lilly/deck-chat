@@ -146,3 +146,6 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 
 ### 7.B — Show active chat's anchor on the PDF (DONE)
 - [x] Pulsing overlay on the anchor page (indigo ring for regions, amber highlighter for text); PdfViewer auto-pans so the anchor lands in the viewport center
+
+### 7.C — Type immediately into selection popup (DONE)
+- [x] Popup keeps the page text selection alive for `⌘C` copy AND accepts typing — document-level keydown routes characters into the prompt until a printable key promotes the input to real focus (see `docs/text-selection-popup-focus.md`)
