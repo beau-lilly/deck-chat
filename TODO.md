@@ -103,6 +103,10 @@
 - [x] Root is a drop target but not a drag source; cycles (folder → its own descendant) are rejected at UI and repo layers
 - [x] Counter-based dragenter/dragleave tracking for Safari-safe hover highlighting
 
+### 4.B.7 — Resizable sidebars (DONE)
+- [x] Drag the inner edge of the left sidebar or right chat panel to resize
+- [x] Widths clamped (sidebar 180–640 px, chat panel 260–800 px) and persisted in localStorage
+
 ### 4.C — Folder & file CRUD (TODO)
 - [ ] Rename folder / rename document (context menu or inline)
 - [ ] Move document to another folder (picker)
