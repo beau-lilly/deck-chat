@@ -21,17 +21,97 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
 
   const hasTextSelection = pendingAnchor?.description && tool === 'text';
 
+  // Refs that mirror the render-state so the document-level keydown handler
+  // (registered once per popup lifetime) can read the current values
+  // without being re-registered on every keystroke.
+  const questionRef = useRef(question);
+  questionRef.current = question;
+  const contextModeRef = useRef(contextMode);
+  contextModeRef.current = contextMode;
+  const onStartChatRef = useRef(onStartChat);
+  onStartChatRef.current = onStartChat;
+
   useEffect(() => {
-    if (pendingAnchor) {
-      setQuestion('');
-      setContextMode('selection');
-      // Don't auto-focus for text selections — it clears the highlight in Safari.
-      // For region selections, auto-focus is fine.
-      if (tool !== 'text') {
-        setTimeout(() => inputRef.current?.focus(), 50);
-      }
+    if (!pendingAnchor) return;
+    setQuestion('');
+    setContextMode('selection');
+
+    // Region selections: no page text selection to preserve → focus the
+    // input immediately so the user can start typing.
+    if (tool !== 'text') {
+      const id = window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
+      return () => window.clearTimeout(id);
     }
-  }, [pendingAnchor, tool]);
+
+    // Text selections: we deliberately DON'T focus the input. Browsers
+    // tie the Selection context to the focused element, so the moment an
+    // input takes focus the page's text selection is torn down — both
+    // Chrome and Safari enforce this. We want the user to be able to
+    // copy (⌘C) the highlighted text, so we keep focus on the document
+    // and route keystrokes into the question state manually.
+    //
+    // The moment the user types a printable character, they've committed
+    // to writing a question — at that point we promote to real input
+    // focus (selection clears, but the user is already typing so the
+    // highlight is no longer needed) and everything behaves like a
+    // normal input from there.
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If the user has already given focus to a real editable (by
+      // clicking the input, or the settings modal is open, etc.), let
+      // that element handle its own keystrokes.
+      const ae = document.activeElement as HTMLElement | null;
+      if (
+        ae instanceof HTMLInputElement ||
+        ae instanceof HTMLTextAreaElement ||
+        ae?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Let the browser handle modifier shortcuts — crucially ⌘C/Ctrl+C
+      // so copy still works on the live selection, plus paste, select-
+      // all, Cmd+arrows, dev-tools shortcuts, etc.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === 'Enter') {
+        const q = questionRef.current.trim();
+        if (q) {
+          e.preventDefault();
+          onStartChatRef.current(q, contextModeRef.current);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        clearSelection();
+        return;
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        setQuestion((prev) => prev.slice(0, -1));
+        return;
+      }
+
+      // Printable single-char keys (`.length === 1` matches a codepoint
+      // like "a", " ", "!", but not "Shift", "ArrowLeft", "Dead", etc.).
+      // Skip key-repeat events — the native input will handle those once
+      // it gets focused below.
+      if (e.key.length === 1 && !e.repeat) {
+        e.preventDefault();
+        const ch = e.key;
+        setQuestion((prev) => prev + ch);
+        // Promote to real input focus. This tears down the page
+        // selection — acceptable because the user is now typing, the
+        // question state has the typed char, and everything from here
+        // (arrow keys, backspace with navigation, more letters) flows
+        // through the normal <input>.
+        inputRef.current?.focus({ preventScroll: true });
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [pendingAnchor, tool, clearSelection]);
 
   if (!pendingAnchor) return null;
 
@@ -91,7 +171,7 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
             type="text"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder={hasTextSelection ? "Ask about this text..." : "Ask about this area..."}
+            placeholder={hasTextSelection ? "Ask about this text…" : "Ask about this area…"}
             className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none"
           />
           <button
