@@ -34,27 +34,42 @@
 .tiptap-editor > * + * {
   margin-top: 0.5rem;
 }
+/* Type scale mirrors src/components/shared/Markdown.tsx so live-preview
+   notes and rendered chat messages pick identical sizes at every
+   heading level. Previously every level collapsed near body size
+   (`text-sm` = 0.875rem) and the only visual cue was bolding. */
 .tiptap-editor h1 {
-  font-size: 1rem;
+  font-size: 1.25rem; /* text-xl */
+  line-height: 1.75rem;
   font-weight: 600;
   color: rgb(241 245 249);
-  margin-top: 0.75rem;
-  margin-bottom: 0.375rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
 }
 .tiptap-editor h2 {
-  font-size: 0.875rem;
+  font-size: 1.125rem; /* text-lg */
+  line-height: 1.625rem;
   font-weight: 600;
   color: rgb(241 245 249);
   margin-top: 0.75rem;
   margin-bottom: 0.375rem;
 }
-.tiptap-editor h3,
+.tiptap-editor h3 {
+  font-size: 1rem; /* text-base */
+  line-height: 1.5rem;
+  font-weight: 600;
+  color: rgb(241 245 249);
+  margin-top: 0.75rem;
+  margin-bottom: 0.25rem;
+}
 .tiptap-editor h4 {
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: 0.875rem; /* text-sm */
+  font-weight: 600;
   color: rgb(241 245 249);
   margin-top: 0.5rem;
   margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .tiptap-editor p {
   margin: 0.5rem 0;

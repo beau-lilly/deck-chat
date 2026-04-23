@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Upload } from 'lucide-react';
 import { useFolders, useAllDocuments } from '../../data/liveQueries';
 import { useLibrarianStore } from '../../stores/librarianStore';
@@ -22,6 +22,20 @@ export default function Sidebar() {
 
   const query = search.trim().toLowerCase();
   const searching = query.length > 0;
+
+  // Same "transition only on open/close toggles, never on resize-drag"
+  // gate as ChatPanel — see the comment there. Without this, dragging
+  // the handle fast leaves a transparent gap where the outer wrapper's
+  // width lags the inner's snapped width.
+  const [animateWidth, setAnimateWidth] = useState(false);
+  const prevOpenRef = useRef(sidebarOpen);
+  useEffect(() => {
+    if (prevOpenRef.current === sidebarOpen) return;
+    prevOpenRef.current = sidebarOpen;
+    setAnimateWidth(true);
+    const t = window.setTimeout(() => setAnimateWidth(false), 220);
+    return () => window.clearTimeout(t);
+  }, [sidebarOpen]);
 
   // Precompute maps once per render so nested FolderNode renders are cheap.
   // When the user is searching we prune the tree down to matches plus the
@@ -148,15 +162,25 @@ export default function Sidebar() {
     };
   }, []);
 
-  if (!sidebarOpen) return null;
-
   const showFolders = filter === 'all' || filter === 'folders';
   const showFiles = filter === 'all' || filter === 'files';
 
+  // Outer wrapper animates width 0 ↔ sidebarWidth for a smooth
+  // collapse/expand. The inner keeps a FIXED width so its flex column
+  // (search bar, tree, upload button) doesn't reflow mid-animation
+  // — `overflow-hidden` on the wrapper clips the inner from the right
+  // as the wrapper shrinks. `inert` when closed so focus/tab-order
+  // skip the hidden panel.
   return (
     <div
+      aria-hidden={!sidebarOpen}
+      inert={!sidebarOpen}
+      style={{ width: sidebarOpen ? `${sidebarWidth}px` : '0px' }}
+      className={`shrink-0 overflow-hidden h-full ${animateWidth ? 'transition-[width] duration-200 ease-out' : ''}`}
+    >
+    <div
       style={{ width: `${sidebarWidth}px` }}
-      className="relative h-full bg-slate-900 border-r border-slate-700 flex flex-col shrink-0"
+      className="relative h-full bg-slate-900 border-r border-slate-700 flex flex-col"
     >
       <div className="px-3 py-2 border-b border-slate-800">
         <SearchBar />
@@ -226,6 +250,7 @@ export default function Sidebar() {
       </div>
 
       <ResizeHandle side="right" width={sidebarWidth} onChange={setSidebarWidth} />
+    </div>
     </div>
   );
 }

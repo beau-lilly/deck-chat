@@ -24,14 +24,15 @@ export default function Markdown({ content, className = '' }: Props) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // Headings — scale down each level so they don't dwarf chat
-          // rows. We intentionally skip h1 styling to discourage the
-          // model from using top-level headings (which look out of
-          // place in a chat bubble).
-          h1: (p) => <h1 className="text-base font-semibold text-slate-100 mt-3 mb-1.5" {...p} />,
-          h2: (p) => <h2 className="text-sm font-semibold text-slate-100 mt-3 mb-1.5" {...p} />,
-          h3: (p) => <h3 className="text-sm font-medium text-slate-100 mt-2 mb-1" {...p} />,
-          h4: (p) => <h4 className="text-sm font-medium text-slate-100 mt-2 mb-1" {...p} />,
+          // Headings — real type-scale step per level so a heading
+          // reads as a heading rather than "slightly larger body text".
+          // Sizes are still conservative (top-level tops out at text-xl
+          // / 20px) so a single-heading LLM response doesn't dwarf a
+          // narrow chat column.
+          h1: (p) => <h1 className="text-xl font-semibold text-slate-100 mt-4 mb-2" {...p} />,
+          h2: (p) => <h2 className="text-lg font-semibold text-slate-100 mt-3 mb-1.5" {...p} />,
+          h3: (p) => <h3 className="text-base font-semibold text-slate-100 mt-3 mb-1" {...p} />,
+          h4: (p) => <h4 className="text-sm font-semibold text-slate-100 mt-2 mb-1 uppercase tracking-wide" {...p} />,
 
           p: (p) => <p className="my-2 whitespace-pre-wrap" {...p} />,
 

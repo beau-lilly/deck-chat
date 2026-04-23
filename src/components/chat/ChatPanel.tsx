@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, StickyNote } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 import { useNoteStore } from '../../stores/noteStore';
@@ -38,6 +38,25 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
   const notes = useNotesForDocument(activeDocumentId ?? '');
 
   const [filter, setFilter] = useState<Filter>('all');
+
+  // Gate the width transition so it only animates on open/close toggles
+  // and NOT on resize-drag. With the transition always on, dragging the
+  // resize handle caused the outer wrapper's width to lag ~100ms behind
+  // the inner's snapped width. The inner (width = chatPanelWidth) was
+  // correct for the cursor, but the outer (also width = chatPanelWidth
+  // but animated) was wider — leaving a transparent gap on the right of
+  // the inner where bg-slate-950 bled through, so the chat panel looked
+  // like it had "come off" the right edge of the screen. Animating only
+  // on toggle lets the drag path stay crisp.
+  const [animateWidth, setAnimateWidth] = useState(false);
+  const prevOpenRef = useRef(open);
+  useEffect(() => {
+    if (prevOpenRef.current === open) return;
+    prevOpenRef.current = open;
+    setAnimateWidth(true);
+    const t = window.setTimeout(() => setAnimateWidth(false), 220);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
   // Build a single unified list, sorted by anchor position (page →
   // y → x) so chats and notes that live on the same page sit next
@@ -85,8 +104,6 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
     return out;
   }, [chats, notes, filter]);
 
-  if (!open) return null;
-
   const totalCount = chats.filter((c) => !c.archived).length + notes.length;
 
   // Same preview → open cycle as the left sidebar nodes. First click
@@ -123,10 +140,19 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
     }
   };
 
+  // Outer wrapper animates width 0 ↔ chatPanelWidth for a smooth
+  // collapse/expand. Matches the left Sidebar: fixed-width inner +
+  // overflow-hidden wrapper so content doesn't reflow mid-animation.
   return (
     <div
+      aria-hidden={!open}
+      inert={!open}
+      style={{ width: open ? `${chatPanelWidth}px` : '0px' }}
+      className={`shrink-0 overflow-hidden h-full ${animateWidth ? 'transition-[width] duration-200 ease-out' : ''}`}
+    >
+    <div
       style={{ width: `${chatPanelWidth}px` }}
-      className="relative h-full bg-slate-900 border-l border-slate-700 flex flex-col shrink-0"
+      className="relative h-full bg-slate-900 border-l border-slate-700 flex flex-col"
     >
       <ResizeHandle side="left" width={chatPanelWidth} onChange={setChatPanelWidth} />
 
@@ -217,6 +243,7 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
           )}
         </>
       )}
+    </div>
     </div>
   );
 }
