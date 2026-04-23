@@ -4,10 +4,12 @@ import { useChatStore } from '../../stores/chatStore';
 import { useNoteStore } from '../../stores/noteStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useLayoutStore } from '../../stores/layoutStore';
+import { classifyClick, usePreviewStore } from '../../stores/previewStore';
 import { useNotesForDocument } from '../../data/liveQueries';
 import ChatThread from './ChatThread';
 import NotePanel from '../notes/NotePanel';
 import ResizeHandle from '../layout/ResizeHandle';
+import type { ChatAnchor } from '../../types';
 
 interface ChatPanelProps {
   open: boolean;
@@ -27,6 +29,7 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
   const activeDocumentId = useDocumentStore((s) => s.activeDocumentId);
   const chatPanelWidth = useLayoutStore((s) => s.chatPanelWidth);
   const setChatPanelWidth = useLayoutStore((s) => s.setChatPanelWidth);
+  const previewed = usePreviewStore((s) => s.previewed);
 
   // Notes live in IndexedDB (via liveQuery) rather than zustand state —
   // they'd balloon the in-memory store since bodies can be long and
@@ -41,8 +44,8 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
   // to each other. Matches the sidebar's ordering so the right
   // panel doesn't feel inconsistent.
   type Row =
-    | { kind: 'chat'; id: string; title: string; pageNumber: number; y: number; x: number; messages: number }
-    | { kind: 'note'; id: string; title: string; pageNumber: number; y: number; x: number };
+    | { kind: 'chat'; id: string; title: string; pageNumber: number; y: number; x: number; anchor: ChatAnchor; messages: number }
+    | { kind: 'note'; id: string; title: string; pageNumber: number; y: number; x: number; anchor: ChatAnchor };
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
@@ -56,6 +59,7 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
           pageNumber: c.anchor.pageNumber,
           y: c.anchor.y ?? 0,
           x: c.anchor.x ?? 0,
+          anchor: c.anchor,
           messages: c.messages.length,
         });
       }
@@ -69,6 +73,7 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
           pageNumber: n.anchor.pageNumber,
           y: n.anchor.y ?? 0,
           x: n.anchor.x ?? 0,
+          anchor: n.anchor,
         });
       }
     }
@@ -84,7 +89,31 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
 
   const totalCount = chats.filter((c) => !c.archived).length + notes.length;
 
+  // Same preview → open cycle as the left sidebar nodes. First click
+  // on an unselected row previews (pan + highlight); a second click on
+  // the previewed row opens. Double-click opens directly because React
+  // fires onClick twice in a native dblclick — the first previews, the
+  // second promotes to open.
   const handleRowClick = (row: Row) => {
+    const isActive =
+      row.kind === 'chat' ? activeChatId === row.id : activeNote?.id === row.id;
+    const mode = classifyClick(row.kind, row.id, isActive);
+    if (mode === 'noop') return;
+
+    if (mode === 'preview') {
+      // Doc is already loaded (right-panel rows come from the active
+      // doc's chats/notes), so we don't need to openDocument here.
+      usePreviewStore.getState().setPreviewed({
+        kind: row.kind,
+        id: row.id,
+        documentId: activeDocumentId ?? '',
+        anchor: row.anchor,
+      });
+      return;
+    }
+
+    // mode === 'open' — promote preview, route the panel.
+    usePreviewStore.getState().clearPreview();
     if (row.kind === 'chat') {
       closeNote();
       setActiveChat(row.id);
@@ -148,11 +177,19 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const isPreviewed =
+                  previewed?.kind === row.kind && previewed.id === row.id;
+                const previewRing =
+                  isPreviewed &&
+                  (row.kind === 'chat'
+                    ? 'bg-indigo-600/10 ring-1 ring-inset ring-indigo-500/60'
+                    : 'bg-amber-500/10 ring-1 ring-inset ring-amber-500/60');
+                return (
                 <button
                   key={`${row.kind}-${row.id}`}
                   onClick={() => handleRowClick(row)}
-                  className="w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800 transition-colors group"
+                  className={`w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800 transition-colors group ${previewRing || ''}`}
                 >
                   <div className="flex items-start gap-2">
                     {row.kind === 'chat' ? (
@@ -174,7 +211,8 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
                     </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </>

@@ -6,6 +6,7 @@ import PdfPage from './PdfPage';
 import { useDocumentStore, MIN_SCALE, MAX_SCALE } from '../../stores/documentStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useNoteStore } from '../../stores/noteStore';
+import { usePreviewStore } from '../../stores/previewStore';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -554,11 +555,38 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
     const panToAnchor = (anchor: { pageNumber: number; x: number; y: number; width?: number; height?: number }) => {
       let retries = 0;
       const attempt = () => {
+        // Gate on initial centering. When the click is a chat/note on a
+        // PDF that isn't currently loaded, the subscription fires right
+        // after `openDocument` swaps `pdfUrl` — but pdf.js hasn't yet
+        // re-rendered the new doc's pages. Reading `pageEl.offsetWidth`
+        // in that window returns the previous doc's stale width (or a
+        // pre-layout transient), which makes `rawFitVisualZoom` below
+        // compute a huge value that clamps to `MAX_SCALE` (4×). The
+        // viewer ends up zoomed into the top-left corner. Waiting for
+        // `hasInitializedRef` — only set true after centerView confirms
+        // the first page's DOM width matches the target render width —
+        // guarantees the new document is laid out before we measure.
+        if (!hasInitializedRef.current) {
+          if (retries++ < 180) requestAnimationFrame(attempt);
+          return;
+        }
         const pageEl = canvas.querySelector<HTMLElement>(
           `[data-page="${anchor.pageNumber}"]`,
         );
         if (!pageEl || pageEl.offsetWidth <= 0) {
-          if (retries++ < 30) requestAnimationFrame(attempt);
+          if (retries++ < 180) requestAnimationFrame(attempt);
+          return;
+        }
+        // Same-story guard for the specific page being navigated to:
+        // pages past the first can lag a frame or two while react-pdf
+        // lays them out. If this page's `offsetWidth` doesn't match the
+        // target width we just handed to react-pdf, the fit-zoom math
+        // below will be wrong too — wait another frame.
+        if (
+          pageWidthRef.current > 0 &&
+          Math.abs(pageEl.offsetWidth - pageWidthRef.current) > 4
+        ) {
+          if (retries++ < 180) requestAnimationFrame(attempt);
           return;
         }
         const centerXInPage = ((anchor.x + (anchor.width ?? 0) / 2) / 100) * pageEl.offsetWidth;
@@ -596,6 +624,10 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       if (s.activeChatId && s.activeChatId !== prev.activeChatId) {
         const chat = s.chats.find((c) => c.id === s.activeChatId);
         if (chat) panToAnchor(chat.anchor);
+        // Opening ANYTHING clears a stale preview — covers paths that
+        // don't go through the sidebar rows (e.g. creating a chat from
+        // the selection popup).
+        usePreviewStore.getState().clearPreview();
       }
     });
 
@@ -606,6 +638,18 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       const nextId = s.activeNote?.id ?? null;
       if (nextId && nextId !== prevId && s.activeNote) {
         panToAnchor(s.activeNote.anchor);
+        usePreviewStore.getState().clearPreview();
+      }
+    });
+
+    // Preview (single-click-but-not-opened) pans to the anchor too, so
+    // selecting a chat/note in the sidebar already brings the PDF to
+    // the right position before the user decides whether to open it.
+    const unsubPreview = usePreviewStore.subscribe((s, prev) => {
+      const prevId = prev.previewed?.id ?? null;
+      const nextId = s.previewed?.id ?? null;
+      if (nextId && nextId !== prevId && s.previewed) {
+        panToAnchor(s.previewed.anchor);
       }
     });
 
@@ -628,6 +672,7 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       unsubStore();
       unsubChat();
       unsubNote();
+      unsubPreview();
     };
     // Deliberately empty deps: effect reads mutable state via refs and
     // store.getState(). Re-attaching on scale change would drop in-flight
