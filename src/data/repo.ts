@@ -5,6 +5,7 @@ import {
   type DocumentRecord,
   type Folder,
   type Message,
+  type Note,
 } from '../types';
 
 function uuid(): string {
@@ -36,6 +37,14 @@ export interface Repo {
   updateLastAssistantMessage(chatId: string, content: string): Promise<void>;
   markResponseStarted(chatId: string): Promise<void>;
   deleteChat(id: string): Promise<void>;
+
+  // notes
+  listNotes(documentId: string): Promise<Note[]>;
+  getNote(id: string): Promise<Note | undefined>;
+  createNote(note: Note): Promise<void>;
+  updateNoteBody(id: string, body: string): Promise<void>;
+  renameNote(id: string, title: string): Promise<void>;
+  deleteNote(id: string): Promise<void>;
 }
 
 async function ensureRoot(): Promise<void> {
@@ -85,6 +94,9 @@ async function deleteDocumentCascade(documentId: string): Promise<void> {
     await db.messages.where('chatId').anyOf(chatIds).delete();
     await db.chats.bulkDelete(chatIds);
   }
+  // Notes belong to a document just like chats — drop them alongside
+  // the doc so they don't become orphans pointing at a missing blob.
+  await db.notes.where('documentId').equals(documentId).delete();
   await db.blobs.delete(documentId);
   await db.documents.delete(documentId);
 }
@@ -157,8 +169,10 @@ export const repo: Repo = {
 
   async deleteFolder(id) {
     if (id === ROOT_FOLDER_ID) return;
-    await db.transaction('rw', [db.folders, db.documents, db.blobs, db.chats, db.messages], () =>
-      deleteFolderCascade(id),
+    await db.transaction(
+      'rw',
+      [db.folders, db.documents, db.blobs, db.chats, db.messages, db.notes],
+      () => deleteFolderCascade(id),
     );
   },
 
@@ -214,7 +228,10 @@ export const repo: Repo = {
   },
 
   async deleteDocument(id) {
-    await db.transaction('rw', [db.documents, db.blobs, db.chats, db.messages], () =>
+    await db.transaction(
+      'rw',
+      [db.documents, db.blobs, db.chats, db.messages, db.notes],
+      () =>
       deleteDocumentCascade(id),
     );
   },
@@ -294,6 +311,31 @@ export const repo: Repo = {
       await db.messages.where('chatId').equals(id).delete();
       await db.chats.delete(id);
     });
+  },
+
+  // ── notes ───────────────────────────────────────────────────────────
+  async listNotes(documentId) {
+    return db.notes.where('documentId').equals(documentId).toArray();
+  },
+
+  async getNote(id) {
+    return db.notes.get(id);
+  },
+
+  async createNote(note) {
+    await db.notes.put(note);
+  },
+
+  async updateNoteBody(id, body) {
+    await db.notes.update(id, { body, updatedAt: new Date() });
+  },
+
+  async renameNote(id, title) {
+    await db.notes.update(id, { title, updatedAt: new Date() });
+  },
+
+  async deleteNote(id) {
+    await db.notes.delete(id);
   },
 };
 

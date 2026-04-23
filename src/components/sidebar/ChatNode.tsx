@@ -2,6 +2,7 @@ import { MessageSquare } from 'lucide-react';
 import type { SidebarChat } from '../../data/liveQueries';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useChatStore } from '../../stores/chatStore';
+import { useNoteStore } from '../../stores/noteStore';
 
 interface Props {
   chat: SidebarChat;
@@ -25,6 +26,9 @@ export default function ChatNode({ chat, depth }: Props) {
       await openDocument(chat.documentId);
       await loadChatsForDocument(chat.documentId);
     }
+    // Close any open note so the right panel switches to the chat
+    // thread instead of staying stuck on the note.
+    useNoteStore.getState().closeNote();
     setActiveChat(chat.id);
   };
 

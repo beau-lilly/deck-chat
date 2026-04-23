@@ -5,6 +5,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import PdfPage from './PdfPage';
 import { useDocumentStore, MIN_SCALE, MAX_SCALE } from '../../stores/documentStore';
 import { useChatStore } from '../../stores/chatStore';
+import { useNoteStore } from '../../stores/noteStore';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
@@ -545,19 +546,12 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       }
     });
 
-    // --- pan to active chat's anchor ---------------------------------
-    // When the user opens a chat, pan the canvas so the anchor is
-    // visible (centered in the viewport). Uses only the CURRENT
-    // visualZoom — doesn't try to change zoom level, just repositions.
-    // The page element for the anchor may not be in the DOM yet (pdf.js
-    // renders pages lazily), so we retry a few frames before giving up.
-    const panToActiveChatAnchor = () => {
-      const cs = useChatStore.getState();
-      if (!cs.activeChatId) return;
-      const chat = cs.chats.find((c) => c.id === cs.activeChatId);
-      if (!chat) return;
-      const anchor = chat.anchor;
-
+    // --- pan to an anchor (chat or note) -----------------------------
+    // When the user opens a chat or note, pan the canvas so the anchor
+    // is visible (centered in the viewport). The page element for the
+    // anchor may not be in the DOM yet (pdf.js renders pages lazily),
+    // so we retry a few frames before giving up.
+    const panToAnchor = (anchor: { pageNumber: number; x: number; y: number; width?: number; height?: number }) => {
       let retries = 0;
       const attempt = () => {
         const pageEl = canvas.querySelector<HTMLElement>(
@@ -567,22 +561,19 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
           if (retries++ < 30) requestAnimationFrame(attempt);
           return;
         }
-        // Anchor center in page-local pixels (x/y/w/h are 0–100%).
         const centerXInPage = ((anchor.x + (anchor.width ?? 0) / 2) / 100) * pageEl.offsetWidth;
         const centerYInPage = ((anchor.y + (anchor.height ?? 0) / 2) / 100) * pageEl.offsetHeight;
-        // Anchor center in canvas-local pixels (layout coords,
-        // pre-transform).
-        const centerXInCanvas = pageEl.offsetLeft + centerXInPage;
         const centerYInCanvas = pageEl.offsetTop + centerYInPage;
-        // Fit-width target zoom: the page's visual width lands just
-        // inside the viewport with a small breathing margin on each
-        // side. Clamped to the global [MIN_SCALE, MAX_SCALE] combined
-        // scale. We convert that fit into a `visualZoom` relative to
-        // the current committed canvas scale — the commit that fires
-        // at the end of the animation will roll it into the canvas.
+        // `centerXInPage` is not used below — kept as the computed
+        // document anchor center for reference (the horizontal target
+        // centers the PAGE, not the anchor, so only y is needed).
+        void centerXInPage;
+
+        // Fit-width target zoom: page's visual width lands just inside
+        // the viewport with a small breathing margin on each side.
         const vw = viewport.clientWidth;
         const vh = viewport.clientHeight;
-        const FIT_MARGIN = 48; // 24 px each side; keeps page off the sidebars
+        const FIT_MARGIN = 48; // 24 px each side
         const committed = useDocumentStore.getState().scale;
         const rawFitVisualZoom = (vw - FIT_MARGIN) / pageEl.offsetWidth;
         const combinedClamped = Math.max(
@@ -591,16 +582,8 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
         );
         const targetZoom = combinedClamped / committed;
 
-        // Horizontal target: center the PAGE (not the anchor) between
-        // the sidebars. All pages have offsetLeft=0 because react-pdf
-        // left-aligns them within the Document wrapper, so the page
-        // midpoint is just offsetWidth/2.
-        //
-        // Vertical target: place the anchor's center at the viewport
-        // center so it's clearly visible; the page can scroll above or
-        // below. animatePanTo's same-easing guarantee means the page
-        // glides smoothly to its centered position and the anchor lands
-        // in view as the zoom resolves.
+        // Horizontal: center the PAGE (all pages have offsetLeft=0).
+        // Vertical: anchor center at viewport center.
         const pageMidXInCanvas = pageEl.offsetLeft + pageEl.offsetWidth / 2;
         const targetTx = vw / 2 - pageMidXInCanvas * targetZoom;
         const targetTy = vh / 2 - centerYInCanvas * targetZoom;
@@ -611,7 +594,18 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
 
     const unsubChat = useChatStore.subscribe((s, prev) => {
       if (s.activeChatId && s.activeChatId !== prev.activeChatId) {
-        panToActiveChatAnchor();
+        const chat = s.chats.find((c) => c.id === s.activeChatId);
+        if (chat) panToAnchor(chat.anchor);
+      }
+    });
+
+    // Same story for notes — opening a different note pans the canvas
+    // to its anchor so the user sees where it lives on the PDF.
+    const unsubNote = useNoteStore.subscribe((s, prev) => {
+      const prevId = prev.activeNote?.id ?? null;
+      const nextId = s.activeNote?.id ?? null;
+      if (nextId && nextId !== prevId && s.activeNote) {
+        panToAnchor(s.activeNote.anchor);
       }
     });
 
@@ -633,6 +627,7 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       viewport.removeEventListener('gestureend', onGestureEnd);
       unsubStore();
       unsubChat();
+      unsubNote();
     };
     // Deliberately empty deps: effect reads mutable state via refs and
     // store.getState(). Re-attaching on scale change would drop in-flight

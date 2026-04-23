@@ -30,6 +30,22 @@ export interface Chat {
   updatedAt: Date;
 }
 
+/**
+ * A markdown-backed note anchored to a text selection or region on a
+ * PDF page. Parallels `Chat` — shares the `ChatAnchor` shape so the
+ * same in-page indicator and auto-pan logic can drive both — but
+ * carries a single editable body instead of a message list.
+ */
+export interface Note {
+  id: string;
+  documentId: string;
+  anchor: ChatAnchor;
+  title: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export const ROOT_FOLDER_ID = 'root';
 
 export interface Folder {

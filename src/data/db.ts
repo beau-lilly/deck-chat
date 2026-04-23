@@ -1,10 +1,14 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { ChatAnchor, ContextMode, Folder, DocumentRecord } from '../types';
 
-// Bump DB_VERSION and add a .version(N+1).stores({...}).upgrade(...) call below
-// whenever the schema changes. Dexie preserves data across schema upgrades
-// provided every old version is still declared.
-export const DB_VERSION = 1;
+// Bump DB_VERSION and add a `.version(N+1).stores({...}).upgrade(...)` call
+// below whenever the schema changes. Dexie preserves data across schema
+// upgrades provided every prior version is still declared.
+//
+//   v1 → v2: added `notes` table (markdown-body notes anchored to a
+//            region/text, parallel to chats). Adding a new table is a
+//            non-destructive upgrade, so no data migration is needed.
+export const DB_VERSION = 2;
 
 // Row shapes used in IndexedDB. These differ slightly from the in-memory
 // `Chat` / `Message` types because:
@@ -43,21 +47,46 @@ export interface MessageRow {
   seq: number;
 }
 
+// Notes live alongside chats — same documentId → many anchors shape.
+// Body is kept on the row itself (not split into chunks) because notes
+// are user-written markdown and rarely bigger than a few KB.
+export interface NoteRow {
+  id: string;
+  documentId: string;
+  anchor: ChatAnchor;
+  title: string;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export class DeckChatDB extends Dexie {
   folders!: EntityTable<FolderRow, 'id'>;
   documents!: EntityTable<DocumentRow, 'id'>;
   blobs!: EntityTable<BlobRow, 'documentId'>;
   chats!: EntityTable<ChatRow, 'id'>;
   messages!: EntityTable<MessageRow, 'id'>;
+  notes!: EntityTable<NoteRow, 'id'>;
 
   constructor() {
     super('deck-chat');
-    this.version(DB_VERSION).stores({
+    // v1 — original schema (pre-notes). Kept declared so users with
+    // existing databases migrate cleanly onto v2.
+    this.version(1).stores({
       folders: 'id, parentId, updatedAt',
       documents: 'id, folderId, updatedAt',
       blobs: 'documentId',
       chats: 'id, documentId, updatedAt',
       messages: 'id, chatId, seq, createdAt',
+    });
+    // v2 — adds notes. Additive schema change, no upgrade() needed.
+    this.version(2).stores({
+      folders: 'id, parentId, updatedAt',
+      documents: 'id, folderId, updatedAt',
+      blobs: 'documentId',
+      chats: 'id, documentId, updatedAt',
+      messages: 'id, chatId, seq, createdAt',
+      notes: 'id, documentId, updatedAt',
     });
   }
 }

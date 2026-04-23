@@ -9,6 +9,7 @@ import {
 import { useDocumentStore } from '../../stores/documentStore';
 import { streamChat, type UsageInfo } from '../../services/llm';
 import { buildContextForMode } from '../../services/pdfContext';
+import Markdown from '../shared/Markdown';
 
 interface ChatThreadProps {
   chatId: string;
@@ -205,11 +206,18 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
             <div className={`text-xs font-medium mb-1 ${msg.role === 'user' ? 'text-indigo-400' : 'text-emerald-400'}`}>
               {msg.role === 'user' ? 'You' : 'Assistant'}
             </div>
-            <div className="whitespace-pre-wrap leading-relaxed">
-              {msg.content || (isStreaming && msg.role === 'assistant' ? (
-                <Loader2 size={14} className="animate-spin text-slate-500" />
-              ) : null)}
-            </div>
+            {msg.content ? (
+              msg.role === 'assistant' ? (
+                // Assistant output comes through the markdown renderer
+                // (headings, lists, tables, code, etc.); user text stays
+                // in plain-pre so they see exactly what they typed.
+                <Markdown content={msg.content} />
+              ) : (
+                <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+              )
+            ) : isStreaming && msg.role === 'assistant' ? (
+              <Loader2 size={14} className="animate-spin text-slate-500" />
+            ) : null}
           </div>
         ))}
         <div ref={messagesEndRef} />

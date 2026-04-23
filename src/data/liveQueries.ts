@@ -13,6 +13,15 @@ export interface SidebarChat {
   updatedAt: Date;
 }
 
+// Lean note shape for sidebar use — no body.
+export interface SidebarNote {
+  id: string;
+  documentId: string;
+  title: string;
+  anchor: ChatAnchor;
+  updatedAt: Date;
+}
+
 // Generic subscription helper — turns a Dexie liveQuery into React state.
 function useLive<T>(factory: () => Promise<T>, deps: unknown[], initial: T): T {
   const [value, setValue] = useState<T>(initial);
@@ -55,6 +64,33 @@ export function useChatsForDocument(documentId: string): SidebarChat[] {
   return useLive(
     async () => {
       const rows = await db.chats.where('documentId').equals(documentId).toArray();
+      rows.sort((a, b) => {
+        const pageDiff = a.anchor.pageNumber - b.anchor.pageNumber;
+        if (pageDiff !== 0) return pageDiff;
+        const yDiff = (a.anchor.y ?? 0) - (b.anchor.y ?? 0);
+        if (yDiff !== 0) return yDiff;
+        return (a.anchor.x ?? 0) - (b.anchor.x ?? 0);
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        documentId: r.documentId,
+        title: r.title,
+        anchor: r.anchor,
+        updatedAt: r.updatedAt,
+      }));
+    },
+    [documentId],
+    [],
+  );
+}
+
+// Notes for a single document, sorted by the same anchor ordering as
+// chats so they interleave naturally in the sidebar when rendered
+// together.
+export function useNotesForDocument(documentId: string): SidebarNote[] {
+  return useLive(
+    async () => {
+      const rows = await db.notes.where('documentId').equals(documentId).toArray();
       rows.sort((a, b) => {
         const pageDiff = a.anchor.pageNumber - b.anchor.pageNumber;
         if (pageDiff !== 0) return pageDiff;
