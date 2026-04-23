@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { ROOT_FOLDER_ID, type Folder, type DocumentRecord } from '../../types';
 import { useLibrarianStore } from '../../stores/librarianStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, hasKeyForSelectedModel } from '../../stores/settingsStore';
 import { repo } from '../../data/repo';
 import { uploadPdfToFolder } from '../../services/uploadDocument';
 import DocumentNode from './DocumentNode';
@@ -137,9 +137,9 @@ export default function FolderNode({
   };
 
   const handleUploadHere = () => {
-    const { anthropicApiKey, setShowSettings } = useSettingsStore.getState();
-    if (!anthropicApiKey) {
-      setShowSettings(true);
+    const state = useSettingsStore.getState();
+    if (!hasKeyForSelectedModel(state)) {
+      state.setShowSettings(true);
       return;
     }
     const input = document.createElement('input');

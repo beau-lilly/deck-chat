@@ -10,7 +10,7 @@ import ApiKeySettings from '../settings/ApiKeySettings';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useChatStore } from '../../stores/chatStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, hasKeyForSelectedModel } from '../../stores/settingsStore';
 import { useLibrarianStore } from '../../stores/librarianStore';
 import { capturePageImage } from '../../services/pdfContext';
 import { uploadPdfToFolder } from '../../services/uploadDocument';
@@ -66,10 +66,13 @@ export default function AppLayout() {
   }, [pendingAnchor, clearSelection, createChat, activeDocumentId]);
 
   const handleUploadClick = useCallback(() => {
-    // Require API key before allowing upload
-    const { anthropicApiKey, setShowSettings } = useSettingsStore.getState();
-    if (!anthropicApiKey) {
-      setShowSettings(true);
+    // Require an API key for the currently-selected model's provider
+    // before allowing upload. If the user has only configured one
+    // provider and has selected a model from the other, this nudges
+    // them to either switch models or add the missing key.
+    const state = useSettingsStore.getState();
+    if (!hasKeyForSelectedModel(state)) {
+      state.setShowSettings(true);
       return;
     }
 
