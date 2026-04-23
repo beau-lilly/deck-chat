@@ -1,7 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Send, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import {
+  useSettingsStore,
+  getApiKeyFor,
+  getModelInfo,
+} from '../../stores/settingsStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { streamChat, type UsageInfo } from '../../services/llm';
 import { buildContextForMode } from '../../services/pdfContext';
@@ -16,8 +20,20 @@ interface ChatThreadProps {
 export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase64, onBack }: ChatThreadProps) {
   const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
   const { addMessage, updateLastAssistantMessage, markResponseStarted } = useChatStore();
-  const { anthropicApiKey, selectedModel } = useSettingsStore();
+  const selectedModel = useSettingsStore((s) => s.selectedModel);
+  // Pull the store state so getApiKeyFor can read whichever key the
+  // selected model's provider needs. Re-renders whenever either key
+  // changes, so swapping a key triggers the auto-send effect below.
+  const apiKey = useSettingsStore((s) => getApiKeyFor(s, selectedModel));
   const setShowSettings = useSettingsStore((s) => s.setShowSettings);
+  // Name shown to the user in auth-error messages. Stays in sync with
+  // whichever provider is backing the selected model.
+  const providerName = (() => {
+    const p = getModelInfo(selectedModel)?.provider;
+    if (p === 'openai') return 'OpenAI';
+    if (p === 'gemini') return 'Gemini';
+    return 'Anthropic';
+  })();
   const pageTexts = useDocumentStore((s) => s.pageTexts);
 
   const [input, setInput] = useState('');
@@ -49,7 +65,7 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
   const handleError = (chatId: string, err: string, isMounted: () => boolean) => {
     const isAuthError = err.includes('Invalid API key') || err.includes('401');
     const errorMsg = isAuthError
-      ? 'Invalid API key. Please update your Anthropic API key in Settings.'
+      ? `Invalid API key. Please update your ${providerName} API key in Settings.`
       : `Error: ${err}`;
     updateLastAssistantMessage(chatId, errorMsg);
     if (isAuthError) setShowSettings(true);
@@ -71,7 +87,7 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
   };
 
   const sendFirstMessage = async () => {
-    if (!anthropicApiKey) {
+    if (!apiKey) {
       setShowSettings(true);
       return;
     }
@@ -87,7 +103,7 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
 
     await streamChat(
       {
-        apiKey: anthropicApiKey,
+        apiKey,
         model: selectedModel,
         messages: currentChat.messages,
         pageImageBase64,
@@ -107,7 +123,7 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
   };
 
   const sendFollowUp = async (content: string) => {
-    if (!anthropicApiKey) {
+    if (!apiKey) {
       setShowSettings(true);
       return;
     }
@@ -120,11 +136,19 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
     const currentChat = useChatStore.getState().chats.find((c) => c.id === chatId);
     if (!currentChat) return;
 
+    // Pass images on every turn, not just the first. The provider
+    // adapters attach them to the first user message in the array so
+    // the model keeps a consistent multimodal context across the
+    // conversation — otherwise Gemini reports itself as "text-based"
+    // once the images drop off, and Anthropic/OpenAI start
+    // hallucinating about what they can see.
     await streamChat(
       {
-        apiKey: anthropicApiKey,
+        apiKey,
         model: selectedModel,
         messages: currentChat.messages,
+        pageImageBase64,
+        fullPageImageBase64: includeFullPageImage ? fullPageImageBase64 : undefined,
         systemPrompt,
       },
       (chunk) => {
@@ -139,13 +163,16 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
     );
   };
 
-  // Auto-send the first message once when the thread opens.
+  // Auto-send the first message once when the thread opens. Re-runs
+  // if the user opens a different chat or swaps into a provider whose
+  // key is configured (e.g. enters a key mid-flow after an auth
+  // failure), since `apiKey` is derived from the selected model.
   useEffect(() => {
     const currentChat = useChatStore.getState().chats.find((c) => c.id === chatId);
-    if (!currentChat?.needsResponse || !anthropicApiKey) return;
+    if (!currentChat?.needsResponse || !apiKey) return;
     sendFirstMessage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId, anthropicApiKey]);
+  }, [chatId, apiKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

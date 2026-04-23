@@ -1,10 +1,8 @@
-import { useRef } from 'react';
-import { Upload, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft } from 'lucide-react';
+import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft } from 'lucide-react';
 import { useDocumentStore, MIN_SCALE, MAX_SCALE, SCALE_STEP } from '../../stores/documentStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSelectionStore, type SelectionTool } from '../../stores/selectionStore';
 import { useLibrarianStore } from '../../stores/librarianStore';
-import { uploadPdfToFolder } from '../../services/uploadDocument';
 
 interface ToolbarProps {
   onTogglePanel: () => void;
@@ -39,60 +37,24 @@ function SelectionToolToggle() {
 }
 
 export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const { pdfFile, pageCount, currentPage, scale, setScale } = useDocumentStore();
   const sidebarOpen = useLibrarianStore((s) => s.sidebarOpen);
   const setSidebarOpen = useLibrarianStore((s) => s.setSidebarOpen);
 
-  const handleUploadClick = () => {
-    const { anthropicApiKey } = useSettingsStore.getState();
-    if (!anthropicApiKey) {
-      useSettingsStore.getState().setShowSettings(true);
-      return;
-    }
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      const folderId = useLibrarianStore.getState().selectedFolderId;
-      void uploadPdfToFolder(file, folderId);
-    }
-    // Reset so picking the same file twice re-triggers onChange.
-    if (e.target) e.target.value = '';
-  };
-
   return (
     <div className="h-12 bg-slate-900 border-b border-slate-700 flex items-center px-4 gap-3 shrink-0">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf"
-        onChange={handleFileChange}
-        className="hidden"
-      />
-
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
         className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-md transition-colors"
         title={sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
       >
-        <PanelLeft size={14} />
-      </button>
-
-      <button
-        onClick={handleUploadClick}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-colors"
-      >
-        <Upload size={14} />
-        {pdfFile ? 'Change PDF' : 'Upload PDF'}
+        <PanelLeft size={14} strokeWidth={1.5} />
       </button>
 
       {pdfFile && (
         <>
           <div className="flex items-center gap-1.5 text-slate-400 text-sm">
-            <FileText size={14} />
+            <FileText size={14} strokeWidth={1.5} />
             <span className="max-w-48 truncate">{pdfFile.name}</span>
           </div>
 

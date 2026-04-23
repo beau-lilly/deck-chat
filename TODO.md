@@ -158,3 +158,8 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 
 ### 7.F — FIT/PAN mode split + auto-recenter everywhere (DONE)
 - [x] FIT mode (page fits): horizontal locked, snap-to-center; PAN mode (zoomed in): 0.2/0.4 smoothstep axis-lock, strict edge bounds so the page never pans off-viewport; zoomBy clamps every step. Auto-recenter on pdfUrl change, scale change, and viewport resize. Manual center button removed (now redundant). Tightened EmptyState centering + sidebar max to 300 px.
+
+## Phase 8: Multi-provider API support
+### 8.A — Anthropic + OpenAI + Gemini provider adapters (DONE)
+- [x] Provider adapter layer (`src/services/providers/`) with extracted Anthropic, new OpenAI Chat Completions, and new Gemini streamGenerateContent; `llm.ts` routes by selected model. Settings store has one key per provider + provider-tagged model registry; settings UI shows three key inputs and a model picker grouped by provider (disables models whose provider lacks a key). All upload gates + ChatThread use `hasKeyForSelectedModel`. Images now sent every turn so Gemini doesn't drop multimodal context. Refreshed models to current releases (Claude 4.7/4.6/4.5, GPT-5.4 + o-series, Gemini 3.x preview + 2.5 stable).
+- [x] UX polish: upload button moved to a rounded pill at the bottom of the sidebar; PanelLeft + FileText icons thinned to strokeWidth=1.5.

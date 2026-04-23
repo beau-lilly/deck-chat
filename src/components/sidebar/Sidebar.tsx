@@ -1,7 +1,10 @@
 import { useEffect, useMemo } from 'react';
+import { Upload } from 'lucide-react';
 import { useFolders, useAllDocuments } from '../../data/liveQueries';
 import { useLibrarianStore } from '../../stores/librarianStore';
 import { useLayoutStore } from '../../stores/layoutStore';
+import { useSettingsStore, hasKeyForSelectedModel } from '../../stores/settingsStore';
+import { uploadPdfToFolder } from '../../services/uploadDocument';
 import { ROOT_FOLDER_ID, type DocumentRecord, type Folder } from '../../types';
 import FolderNode from './FolderNode';
 import SearchBar from './SearchBar';
@@ -180,6 +183,38 @@ export default function Sidebar() {
         ) : (
           <div className="px-3 py-4 text-xs text-slate-500">Loading…</div>
         )}
+      </div>
+
+      {/* Upload button — rounded pill spanning the sidebar width, lives
+          above the upload-target footer so the target label describes
+          what the button will do. Mirrors the gate logic from
+          FolderNode's per-row uploader: no key → open settings;
+          otherwise pick a file and drop it into `selectedFolderId`. */}
+      <div className="p-2 border-t border-slate-800">
+        <button
+          onClick={() => {
+            const state = useSettingsStore.getState();
+            if (!hasKeyForSelectedModel(state)) {
+              state.setShowSettings(true);
+              return;
+            }
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.pdf';
+            input.onchange = (ev) => {
+              const file = (ev.target as HTMLInputElement).files?.[0];
+              if (file && file.type === 'application/pdf') {
+                void uploadPdfToFolder(file, selectedFolderId);
+              }
+            };
+            input.click();
+          }}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-colors"
+          title="Upload PDF"
+        >
+          <Upload size={12} />
+          Upload
+        </button>
       </div>
 
       {/* selected-folder footer — shows where the next upload will land */}
