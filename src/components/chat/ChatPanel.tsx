@@ -1,13 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageCircle, StickyNote } from 'lucide-react';
 import { useChatStore } from '../../stores/chatStore';
 import { useNoteStore } from '../../stores/noteStore';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useLayoutStore } from '../../stores/layoutStore';
+import { classifyClick, usePreviewStore } from '../../stores/previewStore';
 import { useNotesForDocument } from '../../data/liveQueries';
 import ChatThread from './ChatThread';
 import NotePanel from '../notes/NotePanel';
 import ResizeHandle from '../layout/ResizeHandle';
+import type { ChatAnchor } from '../../types';
 
 interface ChatPanelProps {
   open: boolean;
@@ -27,6 +29,7 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
   const activeDocumentId = useDocumentStore((s) => s.activeDocumentId);
   const chatPanelWidth = useLayoutStore((s) => s.chatPanelWidth);
   const setChatPanelWidth = useLayoutStore((s) => s.setChatPanelWidth);
+  const previewed = usePreviewStore((s) => s.previewed);
 
   // Notes live in IndexedDB (via liveQuery) rather than zustand state —
   // they'd balloon the in-memory store since bodies can be long and
@@ -36,13 +39,32 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
 
   const [filter, setFilter] = useState<Filter>('all');
 
+  // Gate the width transition so it only animates on open/close toggles
+  // and NOT on resize-drag. With the transition always on, dragging the
+  // resize handle caused the outer wrapper's width to lag ~100ms behind
+  // the inner's snapped width. The inner (width = chatPanelWidth) was
+  // correct for the cursor, but the outer (also width = chatPanelWidth
+  // but animated) was wider — leaving a transparent gap on the right of
+  // the inner where bg-slate-950 bled through, so the chat panel looked
+  // like it had "come off" the right edge of the screen. Animating only
+  // on toggle lets the drag path stay crisp.
+  const [animateWidth, setAnimateWidth] = useState(false);
+  const prevOpenRef = useRef(open);
+  useEffect(() => {
+    if (prevOpenRef.current === open) return;
+    prevOpenRef.current = open;
+    setAnimateWidth(true);
+    const t = window.setTimeout(() => setAnimateWidth(false), 220);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
   // Build a single unified list, sorted by anchor position (page →
   // y → x) so chats and notes that live on the same page sit next
   // to each other. Matches the sidebar's ordering so the right
   // panel doesn't feel inconsistent.
   type Row =
-    | { kind: 'chat'; id: string; title: string; pageNumber: number; y: number; x: number; messages: number }
-    | { kind: 'note'; id: string; title: string; pageNumber: number; y: number; x: number };
+    | { kind: 'chat'; id: string; title: string; pageNumber: number; y: number; x: number; anchor: ChatAnchor; messages: number }
+    | { kind: 'note'; id: string; title: string; pageNumber: number; y: number; x: number; anchor: ChatAnchor };
 
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
@@ -56,6 +78,7 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
           pageNumber: c.anchor.pageNumber,
           y: c.anchor.y ?? 0,
           x: c.anchor.x ?? 0,
+          anchor: c.anchor,
           messages: c.messages.length,
         });
       }
@@ -69,6 +92,7 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
           pageNumber: n.anchor.pageNumber,
           y: n.anchor.y ?? 0,
           x: n.anchor.x ?? 0,
+          anchor: n.anchor,
         });
       }
     }
@@ -80,11 +104,33 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
     return out;
   }, [chats, notes, filter]);
 
-  if (!open) return null;
-
   const totalCount = chats.filter((c) => !c.archived).length + notes.length;
 
+  // Same preview → open cycle as the left sidebar nodes. First click
+  // on an unselected row previews (pan + highlight); a second click on
+  // the previewed row opens. Double-click opens directly because React
+  // fires onClick twice in a native dblclick — the first previews, the
+  // second promotes to open.
   const handleRowClick = (row: Row) => {
+    const isActive =
+      row.kind === 'chat' ? activeChatId === row.id : activeNote?.id === row.id;
+    const mode = classifyClick(row.kind, row.id, isActive);
+    if (mode === 'noop') return;
+
+    if (mode === 'preview') {
+      // Doc is already loaded (right-panel rows come from the active
+      // doc's chats/notes), so we don't need to openDocument here.
+      usePreviewStore.getState().setPreviewed({
+        kind: row.kind,
+        id: row.id,
+        documentId: activeDocumentId ?? '',
+        anchor: row.anchor,
+      });
+      return;
+    }
+
+    // mode === 'open' — promote preview, route the panel.
+    usePreviewStore.getState().clearPreview();
     if (row.kind === 'chat') {
       closeNote();
       setActiveChat(row.id);
@@ -94,10 +140,19 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
     }
   };
 
+  // Outer wrapper animates width 0 ↔ chatPanelWidth for a smooth
+  // collapse/expand. Matches the left Sidebar: fixed-width inner +
+  // overflow-hidden wrapper so content doesn't reflow mid-animation.
   return (
     <div
+      aria-hidden={!open}
+      inert={!open}
+      style={{ width: open ? `${chatPanelWidth}px` : '0px' }}
+      className={`shrink-0 overflow-hidden h-full ${animateWidth ? 'transition-[width] duration-200 ease-out' : ''}`}
+    >
+    <div
       style={{ width: `${chatPanelWidth}px` }}
-      className="relative h-full bg-slate-900 border-l border-slate-700 flex flex-col shrink-0"
+      className="relative h-full bg-slate-900 border-l border-slate-700 flex flex-col"
     >
       <ResizeHandle side="left" width={chatPanelWidth} onChange={setChatPanelWidth} />
 
@@ -148,11 +203,19 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const isPreviewed =
+                  previewed?.kind === row.kind && previewed.id === row.id;
+                const previewRing =
+                  isPreviewed &&
+                  (row.kind === 'chat'
+                    ? 'bg-indigo-600/10 ring-1 ring-inset ring-indigo-500/60'
+                    : 'bg-amber-500/10 ring-1 ring-inset ring-amber-500/60');
+                return (
                 <button
                   key={`${row.kind}-${row.id}`}
                   onClick={() => handleRowClick(row)}
-                  className="w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800 transition-colors group"
+                  className={`w-full text-left px-4 py-3 hover:bg-slate-800 border-b border-slate-800 transition-colors group ${previewRing || ''}`}
                 >
                   <div className="flex items-start gap-2">
                     {row.kind === 'chat' ? (
@@ -174,11 +237,13 @@ export default function ChatPanel({ open, pageImageBase64, fullPageImageBase64 }
                     </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
       )}
+    </div>
     </div>
   );
 }
