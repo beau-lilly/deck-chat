@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, MessageSquare } from 'lucide-react';
+import { X, MessageSquare, StickyNote } from 'lucide-react';
 import { useSelectionStore } from '../../stores/selectionStore';
 import type { ContextMode } from '../../types';
 
 interface SelectionPopupProps {
   onStartChat: (question: string, contextMode: ContextMode) => void;
+  /** Create a note anchored to the current selection. Receives the
+   *  current input text as an initial markdown body (may be empty). */
+  onCreateNote: (initialBody: string) => void;
 }
 
 const CONTEXT_MODES: { value: ContextMode; label: string; hint: string }[] = [
@@ -13,7 +16,7 @@ const CONTEXT_MODES: { value: ContextMode; label: string; hint: string }[] = [
   { value: 'document', label: 'Full Doc', hint: 'All pages' },
 ];
 
-export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
+export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionPopupProps) {
   const { pendingAnchor, tool, clearSelection } = useSelectionStore();
   const [question, setQuestion] = useState('');
   const [contextMode, setContextMode] = useState<ContextMode>('selection');
@@ -30,6 +33,8 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
   contextModeRef.current = contextMode;
   const onStartChatRef = useRef(onStartChat);
   onStartChatRef.current = onStartChat;
+  const onCreateNoteRef = useRef(onCreateNote);
+  onCreateNoteRef.current = onCreateNote;
 
   useEffect(() => {
     if (!pendingAnchor) return;
@@ -122,6 +127,13 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
     onStartChat(q, contextMode);
   };
 
+  const handleCreateNote = () => {
+    // Notes don't require an input — clicking "Note" with an empty
+    // box opens a blank editor anchored here. If the user has typed
+    // something, we seed the note body with it.
+    onCreateNote(question.trim());
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       clearSelection();
@@ -174,6 +186,15 @@ export default function SelectionPopup({ onStartChat }: SelectionPopupProps) {
             placeholder={hasTextSelection ? "Ask about this text…" : "Ask about this area…"}
             className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none"
           />
+          <button
+            type="button"
+            onClick={handleCreateNote}
+            className="flex items-center gap-1 px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-lg transition-colors shrink-0"
+            title="Create a markdown note anchored to this selection"
+          >
+            <StickyNote size={13} />
+            Note
+          </button>
           <button
             type="submit"
             disabled={!question.trim()}

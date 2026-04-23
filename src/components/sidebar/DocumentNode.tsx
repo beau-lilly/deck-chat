@@ -4,9 +4,10 @@ import type { DocumentRecord } from '../../types';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useLibrarianStore } from '../../stores/librarianStore';
-import { useChatsForDocument } from '../../data/liveQueries';
+import { useChatsForDocument, useNotesForDocument } from '../../data/liveQueries';
 import { repo } from '../../data/repo';
 import ChatNode from './ChatNode';
+import NoteNode from './NoteNode';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
 import InlineEditor from './InlineEditor';
 import { setActiveDrag } from './dragPayload';
@@ -190,28 +191,53 @@ export default function DocumentNode({ doc, depth }: Props) {
   );
 }
 
-// Rendered only when the document is expanded so the liveQuery subscription
-// is scoped to the user's actual interest — collapsing a document unmounts
-// the subscription.
+// Rendered only when the document is expanded so the liveQuery
+// subscriptions are scoped to the user's actual interest — collapsing
+// a document unmounts them. We interleave chats and notes sorted by
+// anchor position (page, then y, then x) so the user sees everything
+// they've anchored on a given page together, regardless of whether
+// it's a chat or a note.
 function ChatsSubtree({ documentId, depth }: { documentId: string; depth: number }) {
   const chats = useChatsForDocument(documentId);
+  const notes = useNotesForDocument(documentId);
 
-  if (chats.length === 0) {
+  if (chats.length === 0 && notes.length === 0) {
     return (
       <div
         style={{ paddingLeft: `${8 + depth * 14}px` }}
         className="py-1 text-[11px] text-slate-600 italic"
       >
-        No chats yet
+        No chats or notes yet
       </div>
     );
   }
 
+  // Merge into a single list tagged by kind so we can sort in one pass
+  // and render with the right component per row.
+  type Row =
+    | { kind: 'chat'; item: (typeof chats)[number] }
+    | { kind: 'note'; item: (typeof notes)[number] };
+  const rows: Row[] = [
+    ...chats.map((item): Row => ({ kind: 'chat', item })),
+    ...notes.map((item): Row => ({ kind: 'note', item })),
+  ];
+  rows.sort((a, b) => {
+    const pa = a.item.anchor.pageNumber - b.item.anchor.pageNumber;
+    if (pa !== 0) return pa;
+    const ya = (a.item.anchor.y ?? 0) - (b.item.anchor.y ?? 0);
+    if (ya !== 0) return ya;
+    return (a.item.anchor.x ?? 0) - (b.item.anchor.x ?? 0);
+  });
+
   return (
     <div>
-      {chats.map((chat) => (
-        <ChatNode key={chat.id} chat={chat} depth={depth} />
-      ))}
+      {rows.map((row) =>
+        row.kind === 'chat' ? (
+          <ChatNode key={`c-${row.item.id}`} chat={row.item} depth={depth} />
+        ) : (
+          <NoteNode key={`n-${row.item.id}`} note={row.item} depth={depth} />
+        ),
+      )}
     </div>
   );
 }

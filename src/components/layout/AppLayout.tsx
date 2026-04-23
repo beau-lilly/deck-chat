@@ -10,6 +10,7 @@ import ApiKeySettings from '../settings/ApiKeySettings';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useChatStore } from '../../stores/chatStore';
+import { useNoteStore } from '../../stores/noteStore';
 import { useSettingsStore, hasKeyForSelectedModel } from '../../stores/settingsStore';
 import { useLibrarianStore } from '../../stores/librarianStore';
 import { capturePageImage } from '../../services/pdfContext';
@@ -59,11 +60,44 @@ export default function AppLayout() {
       }
     }
 
+    // Close any active note before creating the chat — ChatPanel
+    // prefers `activeNote` over `activeChatId`, so without this the
+    // right panel would stay stuck on the note and the newly-created
+    // chat would never come to the front (even though it's persisted).
+    useNoteStore.getState().closeNote();
+
     createChat(activeDocumentId, pendingAnchor, question, contextMode);
 
     clearSelection();
     setPanelOpen(true);
   }, [pendingAnchor, clearSelection, createChat, activeDocumentId]);
+
+  const handleCreateNote = useCallback(
+    async (initialBody: string) => {
+      if (!pendingAnchor) return;
+      if (!activeDocumentId) {
+        console.warn('[Deck Chat] Cannot create note: no active document');
+        return;
+      }
+      // Seed the body: if the user has highlighted text (region-select
+      // carries no description) and hasn't typed anything, drop the
+      // selected text in as a blockquote so it's preserved in the note
+      // even if the on-PDF highlight goes away later.
+      let seed = initialBody;
+      if (!seed && pendingAnchor.description) {
+        seed = `> ${pendingAnchor.description}\n\n`;
+      }
+      // Clear chat's active thread so opening a note doesn't leave a
+      // stale chat mounted behind it in the right panel.
+      useChatStore.getState().setActiveChat(null);
+      await useNoteStore
+        .getState()
+        .createAndOpenNote(activeDocumentId, pendingAnchor, seed);
+      clearSelection();
+      setPanelOpen(true);
+    },
+    [pendingAnchor, activeDocumentId, clearSelection],
+  );
 
   const handleUploadClick = useCallback(() => {
     // Require an API key for the currently-selected model's provider
@@ -107,7 +141,7 @@ export default function AppLayout() {
           fullPageImageBase64={fullPageImageBase64}
         />
       </div>
-      <SelectionPopup onStartChat={handleStartChat} />
+      <SelectionPopup onStartChat={handleStartChat} onCreateNote={handleCreateNote} />
       <TextSelectionListener />
       <ApiKeySettings />
     </div>

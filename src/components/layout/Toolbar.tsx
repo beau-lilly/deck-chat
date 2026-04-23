@@ -1,4 +1,4 @@
-import { FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft } from 'lucide-react';
+import { FileText, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft, PanelRight } from 'lucide-react';
 import { useDocumentStore, MIN_SCALE, MAX_SCALE, SCALE_STEP } from '../../stores/documentStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSelectionStore, type SelectionTool } from '../../stores/selectionStore';
@@ -107,10 +107,10 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
         </button>
         <button
           onClick={onTogglePanel}
-          className="flex items-center gap-1 px-2 py-1.5 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-md transition-colors"
+          className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded-md transition-colors"
+          title={panelOpen ? 'Hide right panel' : 'Show right panel'}
         >
-          {panelOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
-          {panelOpen ? 'Hide Chat' : 'Show Chat'}
+          <PanelRight size={14} strokeWidth={1.5} />
         </button>
       </div>
     </div>
