@@ -178,3 +178,4 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 - [x] `ChatAnchorIndicator` pulses on previewed anchors too (thinner ring, no glow) so "selected but not opened" reads distinctly from "opened".
 - [x] Real type-scale on Markdown + Tiptap headings: h1 text-xl, h2 text-lg, h3 text-base, h4 text-sm uppercase tracked. Previously every level was essentially body-sized with bolding.
 - [x] Both sidebars slide open/closed over 200 ms via width transition + overflow-hidden + fixed-width inner. Animation gated on open/close toggles only so resize-drag stays crisp and doesn't leak slate-950 through the outer's width lag.
+- [x] OpenAI adapter skips `image_url` parts for text-only models (o3-mini and future o-mini variants). Model registry gains a `supportsVision` flag; picker tags non-vision models with "text only". Fixes "Invalid content type. image_url is only supported by certain models." 400s.
