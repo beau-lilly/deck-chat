@@ -167,6 +167,7 @@ export default function ApiKeySettings() {
                 {modelsByProvider.openai.map((m) => (
                   <option key={m.id} value={m.id} disabled={!keyFor('openai')}>
                     {m.name}
+                    {m.supportsVision === false ? ' — text only' : ''}
                     {!keyFor('openai') ? ' — key needed' : ''}
                   </option>
                 ))}
