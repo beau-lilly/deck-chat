@@ -112,14 +112,36 @@ export default function DocumentNode({ doc, depth }: Props) {
 
   return (
     <div>
+      {/* Whole row is clickable (including the py-1 padding strips above
+          and below the filename) — previously only the inner button
+          handled clicks, so a click landing on the row's 4 px top/bottom
+          padding fell into a dead zone. Double-click toggles the
+          chats+notes subtree under the PDF, matching how folders expand. */}
       <div
         ref={rowRef}
         data-ctx-row="1"
         draggable={canDrag}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
+        onClick={() => {
+          if (isEditing) return;
+          void handleOpen();
+        }}
+        onDoubleClick={() => {
+          if (isEditing) return;
+          toggleDocument(doc.id);
+        }}
+        role="button"
+        tabIndex={isEditing ? -1 : 0}
+        onKeyDown={(e) => {
+          if (isEditing) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void handleOpen();
+          }
+        }}
         style={{ paddingLeft: `${4 + depth * 14}px` }}
-        className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded select-none transition-colors ${
+        className={`group flex items-center gap-1 pr-2 py-1 text-xs rounded select-none cursor-pointer transition-colors ${
           isActive ? 'bg-indigo-600/20 text-indigo-200' : 'text-slate-300 hover:bg-slate-800'
         }`}
       >
@@ -128,6 +150,12 @@ export default function DocumentNode({ doc, depth }: Props) {
             e.stopPropagation();
             toggleDocument(doc.id);
           }}
+          // Nested button's own dblclick would bubble to the row and
+          // re-trigger expand/collapse a frame after the button's own
+          // click toggled it — net result: flicker. Stop the dblclick
+          // here so the button's onClick-twice behavior is the only
+          // effect a rapid double-tap of the chevron produces.
+          onDoubleClick={(e) => e.stopPropagation()}
           className="p-0.5 rounded hover:bg-slate-700 text-slate-500 shrink-0"
           aria-label={expanded ? 'Collapse chats' : 'Expand chats'}
         >
@@ -148,14 +176,10 @@ export default function DocumentNode({ doc, depth }: Props) {
             />
           </div>
         ) : (
-          <button
-            onClick={handleOpen}
-            className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
-            title={doc.name}
-          >
+          <span className="flex-1 min-w-0 flex items-center gap-1.5" title={doc.name}>
             <FileText size={12} className="shrink-0 text-slate-500" />
             <span className="truncate">{doc.name}</span>
-          </button>
+          </span>
         )}
 
         {/* Kebab trigger — always-available fallback so users whose right-
@@ -168,6 +192,7 @@ export default function DocumentNode({ doc, depth }: Props) {
             setMenu({ x: rect.right - MENU_WIDTH_ESTIMATE, y: rect.bottom + 2 });
           }}
           onMouseDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
           className="shrink-0 p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-700 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
           title="More actions"
           aria-label="More actions"

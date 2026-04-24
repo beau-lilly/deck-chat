@@ -10,6 +10,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { streamChat, type UsageInfo } from '../../services/llm';
 import { buildContextForMode } from '../../services/pdfContext';
 import Markdown from '../shared/Markdown';
+import AutoGrowTextarea from '../shared/AutoGrowTextarea';
 
 interface ChatThreadProps {
   chatId: string;
@@ -175,12 +176,19 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, apiKey]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // Extracted so both the form's onSubmit (Send button) and the
+  // textarea's Enter-to-submit path share one code path. Shift+Enter
+  // still inserts a newline via the textarea's default behavior.
+  const submit = () => {
     if (!input.trim() || isStreaming) return;
     const msg = input.trim();
     setInput('');
     sendFollowUp(msg);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submit();
   };
 
   const modeLabel = contextMode === 'selection' ? 'Selection' : contextMode === 'slide' ? 'Slide' : 'Full Doc';
@@ -243,21 +251,24 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
         </div>
       )}
 
-      {/* Input */}
+      {/* Input — auto-grows with content. items-end so the Send button
+          stays aligned to the bottom of the growing textarea, and the
+          messages area above shrinks as the composer expands (since
+          the messages div is flex-1 in the panel's column). */}
       <form onSubmit={handleSubmit} className="p-3 border-t border-slate-700 shrink-0">
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
+        <div className="flex items-end gap-2">
+          <AutoGrowTextarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={setInput}
+            onSubmit={submit}
             placeholder="Ask a follow-up..."
             disabled={isStreaming}
-            className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 disabled:opacity-50"
+            className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm leading-relaxed text-slate-200 placeholder-slate-500 outline-none focus:border-indigo-500 disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={isStreaming || !input.trim()}
-            className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 text-white rounded-lg transition-colors"
+            className="p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600 text-white rounded-lg transition-colors shrink-0"
           >
             <Send size={14} />
           </button>
