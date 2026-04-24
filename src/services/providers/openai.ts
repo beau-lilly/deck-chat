@@ -1,4 +1,5 @@
 import type { ProviderStreamFn, UsageInfo } from './types';
+import { modelSupportsVision } from '../../stores/settingsStore';
 
 // OpenAI Chat Completions content parts. Images go as data-URL-wrapped
 // `image_url` objects (OpenAI accepts base64 data URLs inline); text
@@ -36,16 +37,24 @@ export const streamOpenAI: ProviderStreamFn = async (
     messages.push({ role: 'system', content: req.systemPrompt });
   }
 
+  // Text-only reasoning models (o3-mini, o1-mini, …) reject `image_url`
+  // parts outright:
+  //   "Invalid content type. image_url is only supported by certain models."
+  // Fall back to text-only content for those — the system prompt already
+  // carries the extracted per-page text via pdfContext, so the model
+  // still has plenty to work with, just minus the screenshots.
+  const canSendImages = modelSupportsVision(req.model);
+
   for (const msg of req.messages) {
     if (msg.role === 'user' && msg === req.messages[0]) {
       const content: ContentPart[] = [];
-      if (req.fullPageImageBase64) {
+      if (canSendImages && req.fullPageImageBase64) {
         content.push({
           type: 'image_url',
           image_url: { url: `data:image/png;base64,${req.fullPageImageBase64}` },
         });
       }
-      if (req.pageImageBase64) {
+      if (canSendImages && req.pageImageBase64) {
         content.push({
           type: 'image_url',
           image_url: { url: `data:image/png;base64,${req.pageImageBase64}` },

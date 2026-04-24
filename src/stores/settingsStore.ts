@@ -8,6 +8,16 @@ export interface ModelInfo {
   id: string;
   provider: ProviderId;
   name: string;
+  /** Whether the model accepts image inputs. When omitted (undefined),
+   *  the model is assumed to support vision — that's the default across
+   *  all of Anthropic's Claude 4.x, OpenAI's GPT-5/GPT-4.x, and Google's
+   *  Gemini 2.5/3.x families. Explicitly set `false` only on models
+   *  whose API rejects `image_url` (or equivalent) content parts —
+   *  e.g. OpenAI's o3-mini and o1-mini, which are text-only reasoning
+   *  models. Adapters that attach screenshot context must check this
+   *  flag or OpenAI returns `Invalid content type. image_url is only
+   *  supported by certain models.`. */
+  supportsVision?: boolean;
 }
 
 // Keep this in sync with each provider's model docs:
@@ -32,7 +42,10 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
   { id: 'gpt-5.4-nano', provider: 'openai', name: 'GPT-5.4 nano' },
   { id: 'gpt-5.3', provider: 'openai', name: 'GPT-5.3' },
   { id: 'o3', provider: 'openai', name: 'o3 (reasoning)' },
-  { id: 'o3-mini', provider: 'openai', name: 'o3 mini (reasoning)' },
+  // o3-mini is text-only — its API rejects image_url content parts. Keep
+  // it available because its reasoning is still useful, just gate the
+  // screenshots in the OpenAI adapter based on `supportsVision`.
+  { id: 'o3-mini', provider: 'openai', name: 'o3 mini (reasoning)', supportsVision: false },
 
   // --- Google Gemini (3.x preview + stable 2.5) ---------------------
   { id: 'gemini-3.1-pro-preview', provider: 'gemini', name: 'Gemini 3.1 Pro (preview)' },
@@ -47,6 +60,15 @@ const MODEL_INDEX = new Map(AVAILABLE_MODELS.map((m) => [m.id, m]));
 
 export function getModelInfo(modelId: string): ModelInfo | undefined {
   return MODEL_INDEX.get(modelId);
+}
+
+/** Whether the given model accepts image inputs. Unknown ids default
+ *  to `true` (assume vision) so an unregistered model falls back to
+ *  the common-case path rather than silently stripping images. */
+export function modelSupportsVision(modelId: string): boolean {
+  const info = MODEL_INDEX.get(modelId);
+  if (!info) return true;
+  return info.supportsVision !== false;
 }
 
 interface SettingsState {
