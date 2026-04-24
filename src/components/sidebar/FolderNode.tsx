@@ -275,6 +275,16 @@ export default function FolderNode({
               : 'text-slate-300 hover:bg-slate-800/60'
         }`}
         onClick={() => setSelectedFolderId(folder.id)}
+        // Double-click anywhere on the folder row toggles it — so users
+        // don't have to aim at the 12 px chevron. Root is pinned open
+        // (and searching force-expands) so only user-controlled folders
+        // respond. Skipped while the inline editor is active so a
+        // double-click-to-select-word inside the rename field doesn't
+        // collapse the folder underneath.
+        onDoubleClick={() => {
+          if (isRoot || forceExpanded || isEditing) return;
+          toggleFolder(folder.id);
+        }}
       >
         {isRoot ? (
           <span className="block w-4 h-4 shrink-0" aria-hidden="true" />
@@ -284,6 +294,11 @@ export default function FolderNode({
               e.stopPropagation();
               toggleFolder(folder.id);
             }}
+            // See DocumentNode chevron: stop dblclick from bubbling to
+            // the row's toggle so a rapid double-tap on the chevron
+            // doesn't toggle twice (button's onClick fires twice → net
+            // "no change", then row's dblclick would swing it back).
+            onDoubleClick={(e) => e.stopPropagation()}
             className="p-0.5 rounded hover:bg-slate-700 text-slate-500 shrink-0"
             aria-label={expanded ? 'Collapse' : 'Expand'}
           >
@@ -330,6 +345,7 @@ export default function FolderNode({
             setMenu({ x: rect.right - MENU_WIDTH_ESTIMATE, y: rect.bottom + 2 });
           }}
           onMouseDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
           className="shrink-0 p-0.5 rounded text-slate-400 hover:text-slate-100 hover:bg-slate-700 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
           title="More actions"
           aria-label="More actions"

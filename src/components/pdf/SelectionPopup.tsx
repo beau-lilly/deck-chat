@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, MessageSquare, StickyNote } from 'lucide-react';
 import { useSelectionStore } from '../../stores/selectionStore';
+import AutoGrowTextarea from '../shared/AutoGrowTextarea';
 import type { ContextMode } from '../../types';
 
 interface SelectionPopupProps {
@@ -16,11 +17,19 @@ const CONTEXT_MODES: { value: ContextMode; label: string; hint: string }[] = [
   { value: 'document', label: 'Full Doc', hint: 'All pages' },
 ];
 
+type Mode = 'chat' | 'note';
+
 export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionPopupProps) {
   const { pendingAnchor, tool, clearSelection } = useSelectionStore();
   const [question, setQuestion] = useState('');
   const [contextMode, setContextMode] = useState<ContextMode>('selection');
-  const inputRef = useRef<HTMLInputElement>(null);
+  // Drives which submit path runs (chat vs note), whether the Context
+  // pills are visible (chat-only — notes don't make LLM calls so context
+  // modes are irrelevant), and the accent color of the popup (indigo
+  // for chat, amber for note — matching the palette used elsewhere for
+  // those two primitives).
+  const [mode, setMode] = useState<Mode>('chat');
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const hasTextSelection = pendingAnchor?.description && tool === 'text';
 
@@ -31,6 +40,8 @@ export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionP
   questionRef.current = question;
   const contextModeRef = useRef(contextMode);
   contextModeRef.current = contextMode;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const onStartChatRef = useRef(onStartChat);
   onStartChatRef.current = onStartChat;
   const onCreateNoteRef = useRef(onCreateNote);
@@ -40,6 +51,10 @@ export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionP
     if (!pendingAnchor) return;
     setQuestion('');
     setContextMode('selection');
+    // Each new selection defaults back to Chat mode — the Note path is
+    // opt-in via the Type pill. Keeps users who primarily ask questions
+    // from accidentally creating notes after one stray click.
+    setMode('chat');
 
     // Region selections: no page text selection to preserve → focus the
     // input immediately so the user can start typing.
@@ -80,9 +95,19 @@ export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionP
 
       if (e.key === 'Enter') {
         const q = questionRef.current.trim();
-        if (q) {
+        if (modeRef.current === 'chat') {
+          // Chat needs a question — Enter on empty is a no-op so the
+          // user can press it without accidentally spawning a chat
+          // with no prompt.
+          if (q) {
+            e.preventDefault();
+            onStartChatRef.current(q, contextModeRef.current);
+          }
+        } else {
+          // Note mode — an empty body is fine, a blank note just opens
+          // the editor ready for typing.
           e.preventDefault();
-          onStartChatRef.current(q, contextModeRef.current);
+          onCreateNoteRef.current(q);
         }
         return;
       }
@@ -120,18 +145,25 @@ export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionP
 
   if (!pendingAnchor) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // One submit path, dispatched on current mode. Shared between the
+  // primary action button ("Ask" / "Create"), the textarea's Enter key
+  // (via AutoGrowTextarea's onSubmit), and the document-level keydown
+  // fallback that runs when the user types before focusing the input.
+  const submit = () => {
     const q = question.trim();
-    if (!q) return;
-    onStartChat(q, contextMode);
+    if (mode === 'chat') {
+      if (!q) return;
+      onStartChat(q, contextMode);
+    } else {
+      // Notes don't need content at submit time — an empty body just
+      // opens a blank editor the user can fill in.
+      onCreateNote(q);
+    }
   };
 
-  const handleCreateNote = () => {
-    // Notes don't require an input — clicking "Note" with an empty
-    // box opens a blank editor anchored here. If the user has typed
-    // something, we seed the note body with it.
-    onCreateNote(question.trim());
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submit();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -144,7 +176,13 @@ export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionP
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-2xl w-full px-4" data-selection-popup>
       <form
         onSubmit={handleSubmit}
-        className="bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 shadow-2xl"
+        // Border tints amber in Note mode so the user has an unambiguous
+        // visual cue that the popup will produce a note on submit
+        // — matches the amber palette used across NoteNode, NotePanel,
+        // and the anchor indicator.
+        className={`bg-slate-800 border rounded-xl px-4 py-3 shadow-2xl transition-colors ${
+          mode === 'note' ? 'border-amber-500/60' : 'border-slate-600'
+        }`}
         onKeyDown={handleKeyDown}
       >
         {hasTextSelection && (
@@ -156,56 +194,109 @@ export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionP
           </div>
         )}
 
-        {/* Context mode selector */}
-        <div className="flex items-center gap-1 mb-2">
-          <span className="text-[11px] text-slate-500 mr-1">Context:</span>
-          {CONTEXT_MODES.map((mode) => (
+        {/* Type + Context pill row. Type on the left is always visible.
+            Context on the right shows only in Chat mode (notes don't
+            get sent to the LLM, so context mode is meaningless there
+            and would read as dead UI). */}
+        <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5 mb-2">
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] text-slate-500 mr-1">Type:</span>
             <button
-              key={mode.value}
               type="button"
-              onClick={() => setContextMode(mode.value)}
+              onClick={() => setMode('chat')}
               className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
-                contextMode === mode.value
+                mode === 'chat'
                   ? 'bg-indigo-600 text-white'
                   : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-300'
               }`}
-              title={mode.hint}
+              title="Start a chat anchored to this selection"
             >
-              {mode.label}
+              Chat
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => setMode('note')}
+              className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+                mode === 'note'
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-300'
+              }`}
+              title="Write a note anchored to this selection"
+            >
+              Note
+            </button>
+          </div>
+
+          {mode === 'chat' && (
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-slate-500 mr-1">Context:</span>
+              {CONTEXT_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setContextMode(m.value)}
+                  className={`px-2.5 py-1 text-[11px] rounded-md transition-colors ${
+                    contextMode === m.value
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-300'
+                  }`}
+                  title={m.hint}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <MessageSquare size={16} className="text-indigo-400 shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
+        {/* items-end so the action buttons stick to the bottom of the
+            growing textarea — matches how Slack/iMessage-style inputs
+            anchor their send control while the text area expands
+            upward. The icon gets a small top padding so it lines up
+            with the first line of text rather than vertically centering
+            against a multi-line box. */}
+        <div className="flex items-end gap-2">
+          {mode === 'chat' ? (
+            <MessageSquare size={16} className="text-indigo-400 shrink-0 mb-2" />
+          ) : (
+            <StickyNote size={16} className="text-amber-400 shrink-0 mb-2" />
+          )}
+          <AutoGrowTextarea
+            textareaRef={inputRef}
             value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder={hasTextSelection ? "Ask about this text…" : "Ask about this area…"}
-            className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none"
+            onChange={setQuestion}
+            onSubmit={submit}
+            placeholder={
+              mode === 'note'
+                ? 'Start a note or press Enter for a blank one'
+                : hasTextSelection
+                  ? 'Ask about this text…'
+                  : 'Ask about this area…'
+            }
+            className="flex-1 bg-transparent text-sm leading-relaxed text-slate-200 placeholder-slate-500 outline-none py-1"
           />
-          <button
-            type="button"
-            onClick={handleCreateNote}
-            className="flex items-center gap-1 px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-lg transition-colors shrink-0"
-            title="Create a markdown note anchored to this selection"
-          >
-            <StickyNote size={13} />
-            Note
-          </button>
+          {/* Primary action — mode-driven. In Chat mode it's the indigo
+              "Ask" (disabled without a question). In Note mode it's the
+              amber "Create", always enabled since empty notes are valid
+              (the editor opens blank and the user types in the panel). */}
           <button
             type="submit"
-            disabled={!question.trim()}
-            className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm rounded-lg transition-colors shrink-0"
+            disabled={mode === 'chat' && !question.trim()}
+            className={`px-3 py-1 text-white text-sm rounded-lg transition-colors shrink-0 disabled:opacity-40 ${
+              mode === 'note'
+                ? 'bg-amber-500 hover:bg-amber-400'
+                : 'bg-indigo-600 hover:bg-indigo-500'
+            }`}
           >
-            Ask
+            {mode === 'note' ? 'Create' : 'Ask'}
           </button>
+          {/* h-7 (28 px) matches the primary button's text-sm + py-1
+              computed height so items-end bottom-aligns both to the
+              same baseline instead of leaving the icon-only X short. */}
           <button
             type="button"
             onClick={clearSelection}
-            className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors shrink-0"
+            className="h-7 w-7 flex items-center justify-center hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200 transition-colors shrink-0"
           >
             <X size={14} />
           </button>
