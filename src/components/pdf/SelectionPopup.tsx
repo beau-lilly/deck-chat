@@ -50,15 +50,29 @@ export default function SelectionPopup({ onStartChat, onCreateNote }: SelectionP
   useEffect(() => {
     if (!pendingAnchor) return;
     setQuestion('');
-    setContextMode('selection');
+    // Whole-slide anchors (the page-number-badge "Ask about this
+    // slide" path) default to the 'slide' context mode so the LLM
+    // gets the page text + screenshot without the user having to
+    // flip the pill manually. Region/text selections still default
+    // to 'selection' as before.
+    const isWholeSlide =
+      (pendingAnchor.x ?? 0) <= 0.5 &&
+      (pendingAnchor.y ?? 0) <= 0.5 &&
+      (pendingAnchor.width ?? 0) >= 99 &&
+      (pendingAnchor.height ?? 0) >= 99;
+    setContextMode(isWholeSlide ? 'slide' : 'selection');
     // Each new selection defaults back to Chat mode — the Note path is
     // opt-in via the Type pill. Keeps users who primarily ask questions
     // from accidentally creating notes after one stray click.
     setMode('chat');
 
-    // Region selections: no page text selection to preserve → focus the
-    // input immediately so the user can start typing.
-    if (tool !== 'text') {
+    // No text selection to preserve (region drag, whole-slide click,
+    // or any anchor that didn't capture page text) → focus the input
+    // immediately so the user can start typing. The keydown-bridge
+    // pathway below is only needed when a real `description` is
+    // present, because that's the only case where the browser's text
+    // selection on the page is what we're trying not to clobber.
+    if (!pendingAnchor.description) {
       const id = window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50);
       return () => window.clearTimeout(id);
     }

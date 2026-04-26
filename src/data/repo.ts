@@ -1,4 +1,4 @@
-import { db, type MessageRow } from './db';
+import { db, type ChatRow, type MessageRow } from './db';
 import {
   ROOT_FOLDER_ID,
   type Chat,
@@ -36,6 +36,10 @@ export interface Repo {
   appendMessage(chatId: string, msg: Message): Promise<void>;
   updateLastAssistantMessage(chatId: string, content: string): Promise<void>;
   markResponseStarted(chatId: string): Promise<void>;
+  /** Rename a chat. `markGenerated` is set by the auto-title flow so
+   *  the flag never gets flipped back to false by, say, a future
+   *  user-initiated rename that called this with markGenerated: false. */
+  renameChat(id: string, title: string, markGenerated?: boolean): Promise<void>;
   deleteChat(id: string): Promise<void>;
 
   // notes
@@ -115,6 +119,7 @@ async function hydrateChat(chatRow: Awaited<ReturnType<typeof db.chats.get>>): P
     contextMode: chatRow.contextMode,
     archived: chatRow.archived,
     needsResponse: chatRow.needsResponse,
+    titleGenerated: chatRow.titleGenerated,
     createdAt: chatRow.createdAt,
     updatedAt: chatRow.updatedAt,
     messages: msgRows.map((m) => ({
@@ -253,6 +258,7 @@ export const repo: Repo = {
         contextMode: chat.contextMode,
         archived: chat.archived,
         needsResponse: chat.needsResponse,
+        titleGenerated: chat.titleGenerated,
         createdAt: chat.createdAt,
         updatedAt: chat.updatedAt,
       });
@@ -304,6 +310,12 @@ export const repo: Repo = {
 
   async markResponseStarted(chatId) {
     await db.chats.update(chatId, { needsResponse: false, updatedAt: new Date() });
+  },
+
+  async renameChat(id, title, markGenerated) {
+    const patch: Partial<ChatRow> = { title, updatedAt: new Date() };
+    if (markGenerated) patch.titleGenerated = true;
+    await db.chats.update(id, patch);
   },
 
   async deleteChat(id) {

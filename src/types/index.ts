@@ -26,6 +26,13 @@ export interface Chat {
   contextMode: ContextMode;
   archived: boolean;
   needsResponse: boolean;
+  /** True once the auto-title LLM call has replaced the initial
+   *  truncated-question title with a summarized one. Prevents the
+   *  generation from re-firing on refresh or on subsequent follow-up
+   *  messages — titles are set once per chat. Optional so pre-existing
+   *  chats (persisted before this flag existed) read as undefined and
+   *  skip regeneration as well. */
+  titleGenerated?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

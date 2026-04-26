@@ -653,10 +653,49 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       }
     });
 
+    // Esc-anywhere clears any active preview. Skipped when an input,
+    // textarea, or contentEditable has focus — those typically use Esc
+    // for their own cancel actions (search bar clear, inline-rename
+    // cancel, selection-popup dismiss) and we don't want to fight them.
+    const onDocKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const ae = document.activeElement as HTMLElement | null;
+      if (
+        ae instanceof HTMLInputElement ||
+        ae instanceof HTMLTextAreaElement ||
+        ae?.isContentEditable
+      ) {
+        return;
+      }
+      if (usePreviewStore.getState().previewed) {
+        usePreviewStore.getState().clearPreview();
+        // Blur the previously-clicked button. Chrome (unlike Safari)
+        // paints its default :focus outline on a button after a click
+        // and only removes it when focus moves elsewhere — without
+        // this, clearing preview leaves a stray indigo border around
+        // the row the user just deselected. Blurring drops focus to
+        // <body> so the outline goes with it.
+        if (ae && typeof ae.blur === 'function') ae.blur();
+      }
+    };
+
+    // Click anywhere in the viewport (the empty slate-950 background or
+    // a non-anchor area of a PDF page) clears the preview. Anchor
+    // buttons and the page-number badge call `e.stopPropagation()` in
+    // their own onClicks so they don't reach this handler — only true
+    // "click into nothing" gestures land here.
+    const onViewportClick = (_e: MouseEvent) => {
+      if (usePreviewStore.getState().previewed) {
+        usePreviewStore.getState().clearPreview();
+      }
+    };
+
     viewport.addEventListener('wheel', onWheel, { passive: false });
     viewport.addEventListener('gesturestart', onGestureStart);
     viewport.addEventListener('gesturechange', onGestureChange);
     viewport.addEventListener('gestureend', onGestureEnd);
+    viewport.addEventListener('click', onViewportClick);
+    document.addEventListener('keydown', onDocKeyDown);
 
     return () => {
       if (commitTimer !== null) clearTimeout(commitTimer);
@@ -669,6 +708,8 @@ export default function PdfViewer({ containerWidth }: PdfViewerProps) {
       viewport.removeEventListener('gesturestart', onGestureStart);
       viewport.removeEventListener('gesturechange', onGestureChange);
       viewport.removeEventListener('gestureend', onGestureEnd);
+      viewport.removeEventListener('click', onViewportClick);
+      document.removeEventListener('keydown', onDocKeyDown);
       unsubStore();
       unsubChat();
       unsubNote();

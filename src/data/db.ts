@@ -33,6 +33,10 @@ export interface ChatRow {
   contextMode: ContextMode;
   archived: boolean;
   needsResponse: boolean;
+  /** See Chat.titleGenerated. Not indexed — Dexie stores arbitrary
+   *  extra fields on the row without a schema bump, so this is a
+   *  zero-migration addition. */
+  titleGenerated?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
