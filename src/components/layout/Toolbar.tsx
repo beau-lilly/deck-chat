@@ -1,8 +1,10 @@
-import { FileText, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft, PanelRight } from 'lucide-react';
+import { FileText, ZoomIn, ZoomOut, Settings, Type, BoxSelect, PanelLeft, PanelRight, Eye, EyeOff } from 'lucide-react';
 import { useDocumentStore, MIN_SCALE, MAX_SCALE, SCALE_STEP } from '../../stores/documentStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSelectionStore, type SelectionTool } from '../../stores/selectionStore';
 import { useLibrarianStore } from '../../stores/librarianStore';
+import { useLayoutStore } from '../../stores/layoutStore';
+import DelayedTooltip from '../shared/DelayedTooltip';
 
 interface ToolbarProps {
   onTogglePanel: () => void;
@@ -13,26 +15,60 @@ function SelectionToolToggle() {
   const tool = useSelectionStore((s) => s.tool);
   const setTool = useSelectionStore((s) => s.setTool);
 
-  const btn = (t: SelectionTool, icon: React.ReactNode, label: string) => (
+  const btn = (
+    t: SelectionTool,
+    icon: React.ReactNode,
+    label: string,
+    tooltip: string,
+  ) => (
     <button
       onClick={() => setTool(t)}
-      className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-colors ${
+      aria-label={tooltip}
+      // `group/tooltip relative` lets DelayedTooltip anchor below
+      // and react to direct hover on the button (instead of the
+      // OS-styled native `title` tooltip we used to use).
+      className={`group/tooltip relative flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-colors ${
         tool === t
           ? 'bg-indigo-600 text-white'
           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
       }`}
-      title={label}
     >
       {icon}
       {label}
+      <DelayedTooltip position="below">{tooltip}</DelayedTooltip>
     </button>
   );
 
   return (
     <div className="flex items-center gap-0.5 bg-slate-800 rounded-md p-0.5">
-      {btn('text', <Type size={12} />, 'Text')}
-      {btn('region', <BoxSelect size={12} />, 'Region')}
+      {btn('text', <Type size={12} />, 'Text', 'Highlight text on the slide')}
+      {btn('region', <BoxSelect size={12} />, 'Region', 'Drag a region on the slide')}
     </div>
+  );
+}
+
+// "Show all anchors" toggle — when active, every chat/note anchor on
+// the current page gets a faint outline/highlight so the user can see
+// at a glance where their annotations live across the document.
+// Active or previewed anchors still render bright on top.
+function AnchorVisibilityToggle() {
+  const showAllAnchors = useLayoutStore((s) => s.showAllAnchors);
+  const setShowAllAnchors = useLayoutStore((s) => s.setShowAllAnchors);
+  const label = showAllAnchors ? 'Hide all anchors' : 'Show all anchors';
+  return (
+    <button
+      onClick={() => setShowAllAnchors(!showAllAnchors)}
+      aria-label={label}
+      aria-pressed={showAllAnchors}
+      className={`group/tooltip relative p-1.5 rounded-md transition-colors ${
+        showAllAnchors
+          ? 'bg-slate-700 text-slate-100'
+          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+      }`}
+    >
+      {showAllAnchors ? <Eye size={14} /> : <EyeOff size={14} />}
+      <DelayedTooltip position="below">{label}</DelayedTooltip>
+    </button>
   );
 }
 
@@ -95,6 +131,8 @@ export default function Toolbar({ onTogglePanel, panelOpen }: ToolbarProps) {
           <div className="h-5 w-px bg-slate-700" />
 
           <SelectionToolToggle />
+
+          <AnchorVisibilityToggle />
         </>
       )}
 

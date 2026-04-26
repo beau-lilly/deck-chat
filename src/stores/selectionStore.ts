@@ -23,6 +23,10 @@ interface SelectionState {
   updateDrag: (x: number, y: number) => void;
   finishDragSelection: (pageNumber: number, x: number, y: number, wasDrag: boolean) => void;
   finishTextSelection: (pageNumber: number, selectedText: string, x: number, y: number, width: number, height: number) => void;
+  /** "Ask about this slide" — sets the pendingAnchor to the whole page
+   *  so SelectionPopup pops up with a full-slide context. Triggered
+   *  by clicking the page-number badge on a slide. */
+  selectWholeSlide: (pageNumber: number) => void;
   clearSelection: () => void;
 }
 
@@ -98,6 +102,26 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
         description: selectedText,
       },
       drag: null,
+    });
+  },
+
+  selectWholeSlide: (pageNumber) => {
+    // Whole-page region anchor (0,0,100,100). The popup detects this
+    // shape and defaults the context mode to 'slide' so the LLM gets
+    // the page text + screenshot without the user having to flip the
+    // pill manually.
+    set({
+      dragMode: 'idle',
+      activePageNumber: null,
+      drag: null,
+      pendingAnchor: {
+        pageNumber,
+        type: 'region',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+      },
     });
   },
 

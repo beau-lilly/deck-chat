@@ -34,19 +34,11 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
-/** Turn a markdown body into a sensible default title. Pulls the first
- *  non-empty line, strips markdown hashes / stars, and caps to 60 chars.
- *  Falls back to "Untitled note" if the body is empty. */
-function deriveTitle(body: string): string {
-  const firstLine = body.split('\n').find((l) => l.trim().length > 0);
-  if (!firstLine) return 'Untitled note';
-  const stripped = firstLine
-    .replace(/^#+\s*/, '')
-    .replace(/^\*+\s*/, '')
-    .replace(/^[*_~`]+|[*_~`]+$/g, '')
-    .trim();
-  return stripped.length > 60 ? `${stripped.slice(0, 57)}…` : stripped;
-}
+// Default title for a freshly-created note. Notes now carry explicit
+// titles (not auto-derived from the body's first line) — see the
+// note on updateActiveNoteBody below — so every note starts here and
+// only changes when the user clicks the header to rename it.
+const DEFAULT_TITLE = 'Untitled note';
 
 export const useNoteStore = create<NoteState>((set, get) => ({
   activeNote: null,
@@ -54,11 +46,16 @@ export const useNoteStore = create<NoteState>((set, get) => ({
 
   createAndOpenNote: async (documentId, anchor, initialBody = '') => {
     const now = new Date();
+    // Always start as "Untitled note" regardless of `initialBody`.
+    // A seeded body (e.g. a blockquote of the selected text — see
+    // AppLayout.handleCreateNote) used to drive an auto-derived title
+    // like `> Selected text`, which read as noise. Users rename via
+    // the header click-to-edit flow instead.
     const note: Note = {
       id: uuid(),
       documentId,
       anchor,
-      title: deriveTitle(initialBody),
+      title: DEFAULT_TITLE,
       body: initialBody,
       createdAt: now,
       updatedAt: now,
@@ -76,28 +73,19 @@ export const useNoteStore = create<NoteState>((set, get) => ({
 
   closeNote: () => set({ activeNote: null }),
 
+  // Titles are now explicit, not derived. A body edit only writes the
+  // body — the title is untouched unless the user calls
+  // renameActiveNote via the header click-to-edit UI. This matches
+  // the Obsidian/Notion model where titles are first-class fields,
+  // and avoids the "my title just changed to '> Selected text'"
+  // surprise that the old auto-derive produced when the body was
+  // seeded with a blockquote.
   updateActiveNoteBody: async (body) => {
     const current = get().activeNote;
     if (!current) return;
-    // Auto-retitle as long as the user hasn't customised the title away
-    // from whatever was derived from the previous body. If the stored
-    // title still matches the derived-from-previous-body title, we
-    // follow along; otherwise we leave it alone (user intervened).
-    const prevDerived = deriveTitle(current.body);
-    const nextTitle =
-      current.title === prevDerived ? deriveTitle(body) : current.title;
-    const now = new Date();
-    const updated: Note = {
-      ...current,
-      body,
-      title: nextTitle,
-      updatedAt: now,
-    };
+    const updated: Note = { ...current, body, updatedAt: new Date() };
     set({ activeNote: updated });
     await repo.updateNoteBody(current.id, body);
-    if (nextTitle !== current.title) {
-      await repo.renameNote(current.id, nextTitle);
-    }
   },
 
   renameActiveNote: async (title) => {

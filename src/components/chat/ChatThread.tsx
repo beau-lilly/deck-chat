@@ -9,6 +9,7 @@ import {
 import { useDocumentStore } from '../../stores/documentStore';
 import { streamChat, type UsageInfo } from '../../services/llm';
 import { buildContextForMode } from '../../services/pdfContext';
+import { generateChatTitle } from '../../services/titleGeneration';
 import Markdown from '../shared/Markdown';
 import AutoGrowTextarea from '../shared/AutoGrowTextarea';
 
@@ -21,7 +22,7 @@ interface ChatThreadProps {
 
 export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase64, onBack }: ChatThreadProps) {
   const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
-  const { addMessage, updateLastAssistantMessage, markResponseStarted } = useChatStore();
+  const { addMessage, updateLastAssistantMessage, markResponseStarted, renameChat } = useChatStore();
   const selectedModel = useSettingsStore((s) => s.selectedModel);
   // Pull the store state so getApiKeyFor can read whichever key the
   // selected model's provider needs. Re-renders whenever either key
@@ -103,6 +104,34 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
     setIsStreaming(true);
     streamingRef.current = '';
 
+    // Fire the auto-title call in parallel with the main chat stream.
+    // Runs off the critical path — a slow or failed title call never
+    // blocks the streaming response. Skipped if the title was already
+    // generated (e.g. user reopened a chat whose first-message stream
+    // was interrupted but whose title landed before the reload).
+    //
+    // Passes the selection's `description` (the highlighted text, if
+    // any) alongside the question. Without the selection, referential
+    // questions like "what is this?" give the title model nothing to
+    // summarize and it echoes the question back as the title. The
+    // anchor's description carries the subject matter.
+    const firstUserMsg = currentChat.messages[0];
+    const providerId = getModelInfo(selectedModel)?.provider;
+    if (firstUserMsg && providerId && !currentChat.titleGenerated) {
+      void generateChatTitle(
+        firstUserMsg.content,
+        providerId,
+        apiKey,
+        currentChat.anchor.description,
+      )
+        .then((title) => {
+          if (title) renameChat(chatId, title, true);
+        })
+        .catch(() => {
+          /* title gen is best-effort — leave the truncated question as-is */
+        });
+    }
+
     await streamChat(
       {
         apiKey,
@@ -169,9 +198,25 @@ export default function ChatThread({ chatId, pageImageBase64, fullPageImageBase6
   // if the user opens a different chat or swaps into a provider whose
   // key is configured (e.g. enters a key mid-flow after an auth
   // failure), since `apiKey` is derived from the selected model.
+  //
+  // Two guards, structural + flag:
+  //   - `needsResponse` is the canonical "this chat hasn't been
+  //     answered yet" flag, set by createChat and cleared by
+  //     markResponseStarted before the first stream begins.
+  //   - The structural check (exactly one message, role 'user')
+  //     belt-and-suspenders against any path where the flag could
+  //     leak true on an already-answered chat — without this, opening
+  //     such a chat by clicking its anchor was producing a second
+  //     empty Assistant placeholder and triggering a duplicate LLM
+  //     call every time.
   useEffect(() => {
     const currentChat = useChatStore.getState().chats.find((c) => c.id === chatId);
-    if (!currentChat?.needsResponse || !apiKey) return;
+    if (!currentChat || !apiKey) return;
+    const isFresh =
+      currentChat.messages.length === 1 &&
+      currentChat.messages[0]?.role === 'user';
+    if (!isFresh) return;
+    if (!currentChat.needsResponse) return;
     sendFirstMessage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, apiKey]);

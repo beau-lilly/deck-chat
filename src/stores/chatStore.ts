@@ -19,6 +19,9 @@ interface ChatState {
   addMessage: (chatId: string, role: 'user' | 'assistant', content: string) => void;
   updateLastAssistantMessage: (chatId: string, content: string) => void;
   markResponseStarted: (chatId: string) => void;
+  /** Update a chat's title. `markGenerated` is set by the auto-title
+   *  flow so subsequent opens don't re-run the LLM title call. */
+  renameChat: (chatId: string, title: string, markGenerated?: boolean) => void;
   setActiveChat: (chatId: string | null) => void;
   getActiveChat: () => Chat | undefined;
 }
@@ -80,6 +83,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     }));
     void repo.markResponseStarted(chatId);
+  },
+
+  renameChat: (chatId, title, markGenerated) => {
+    set((s) => ({
+      chats: s.chats.map((c) =>
+        c.id === chatId
+          ? {
+              ...c,
+              title,
+              titleGenerated: markGenerated ? true : c.titleGenerated,
+              updatedAt: new Date(),
+            }
+          : c,
+      ),
+    }));
+    void repo.renameChat(chatId, title, markGenerated);
   },
 
   updateLastAssistantMessage: (chatId, content) => {

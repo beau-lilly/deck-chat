@@ -25,14 +25,12 @@ export default function PdfPage({ pageNumber, width }: PdfPageProps) {
         renderAnnotationLayer={false}
       />
       {isRegionMode && <SelectionOverlay pageNumber={pageNumber} />}
-      {/* Always render — component returns null if this page isn't the
-          active chat's anchor page. Sits above the SelectionOverlay
-          (later in DOM order) so the indicator is visible during both
-          text and region modes. */}
+      {/* Always renders. Owns the spatial anchor highlights AND the
+          bottom-right cluster (slide-wide chat/note chips + the
+          page-number badge that doubles as "Ask about this slide").
+          The badge used to live in this file but now sits inside the
+          cluster so chips and badge can share a single hover group. */}
       <ChatAnchorIndicator pageNumber={pageNumber} />
-      <div className="absolute bottom-2 right-3 text-xs text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded z-20 pointer-events-none">
-        {pageNumber}
-      </div>
     </div>
   );
 }

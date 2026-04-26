@@ -76,7 +76,13 @@ export default function SelectionOverlay({ pageNumber }: SelectionOverlayProps) 
   return (
     <div
       ref={overlayRef}
-      className="absolute inset-0 cursor-crosshair z-10"
+      // No z-index here on purpose — natural DOM order already places
+      // this overlay above the (invisible-in-region-mode) text layer
+      // and below `ChatAnchorIndicator`, which is rendered as a later
+      // sibling in PdfPage. Setting z-10 used to lift the overlay
+      // ABOVE the anchor marks, swallowing every anchor click in
+      // region mode and making them unusable.
+      className="absolute inset-0 cursor-crosshair"
       onMouseDown={handleMouseDown}
     >
       {/* Active drag rectangle */}
