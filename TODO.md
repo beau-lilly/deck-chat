@@ -189,3 +189,6 @@ Swap `DexieRepo` for a `RestRepo` implementing the same `Repo` interface. No UI 
 - [x] Anchor overhaul: anchors are clickable buttons, slide-wide chats/notes lift into a compact icon-chip cluster above the page-number badge, page badge doubles as "Ask about this slide", show-all toolbar toggle persists in `layoutStore`, light-blue (#a2d9f5) dot indicator on the badge for slide-wide annotations, restyled with thinner rings + kind-coded indigo/amber + text-vs-region differentiation.
 - [x] Custom `DelayedTooltip` (500 ms hover delay, instant hide) on Toolbar buttons (Show all anchors, Text/Region toggle) and the page-number badge — replaces native OS-styled `title=` for consistent dark-themed hover hints.
 - [x] Esc-clears-preview + viewport-click-clears-preview in PdfViewer (focus-blur on Esc to fix Chrome's lingering focus-ring). SelectionOverlay z-10 dropped so anchors aren't swallowed in region mode.
+
+### 9.D — Anchor overlap z-order (DONE)
+- [x] `compareMarksForZ` comparator orders overlapping spatial anchors per-spec: importance (faint < preview < active) wins overall; within a tier, text > region; within a kind, smaller anchor on top (= least space outside the overlap for a pair); ties broken by later reading-order offset on top.
