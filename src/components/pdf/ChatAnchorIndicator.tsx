@@ -285,11 +285,17 @@ export default function ChatAnchorIndicator({ pageNumber }: Props) {
   return (
     <>
       {/* Spatial layer — region/text anchors render as positioned
-          highlight boxes. Painted in low-to-high-importance order so
-          bright pulses end up on top: faint < preview < active. */}
+          highlight boxes. Sorted via `compareMarksForZ` so:
+            1. Importance order is preserved (faint < preview < active)
+               so the user's focus mark always pulses on top.
+            2. Within the same tier, text overlays region.
+            3. Within the same kind, smaller-size anchors paint on top
+               (so a small text highlight surrounded by a larger one
+               stays clickable).
+            4. Ties resolved by later reading-order offset on top. */}
       {spatialMarks
         .slice()
-        .sort((a, b) => importance(a) - importance(b))
+        .sort(compareMarksForZ)
         .map((m) => (
           <AnchorMark key={m.key} mark={m} onActivate={activate} />
         ))}
@@ -394,6 +400,88 @@ function importance(m: Mark): number {
   if (m.brightness === 'faint') return 0;
   if (m.isActive) return 2;
   return 1;
+}
+
+/** Whether an anchor came from a text selection (vs. a region drag).
+ *  Text selections carry the highlighted string in `description`;
+ *  region selections leave it undefined. Text-vs-region matters for
+ *  the overlap z-order rule below. */
+function isTextAnchor(a: ChatAnchor): boolean {
+  return typeof a.description === 'string' && a.description.length > 0;
+}
+
+/** Anchor "size" for overlap z-ordering — larger means "more space
+ *  outside any overlap" with a competitor anchor.
+ *
+ *   - text anchors: count of selected characters.
+ *   - region anchors: width × height in (% × %), used purely as a
+ *     relative magnitude for sorting. No real units.
+ *
+ *  Per the spec, the SMALLER size paints on top. For a pair the
+ *  overlap region is fixed, so smaller = more enclosed = the anchor
+ *  that would otherwise be hidden beneath the larger one. */
+function sizeOfAnchor(a: ChatAnchor): number {
+  if (isTextAnchor(a)) return (a.description ?? '').length;
+  return (a.width ?? 0) * (a.height ?? 0);
+}
+
+/** Reading-order proxy used as the text-vs-text tiebreaker. We don't
+ *  persist character offsets in the chat anchor, so we compose
+ *  (pageNumber, y, x) into a single sortable number — earlier in
+ *  reading order = smaller, later = larger. The factors keep each
+ *  field's range non-overlapping (pageNumber dwarfs y, y dwarfs x).
+ *
+ *  Per the spec, the LATER offset paints on top among text anchors
+ *  with identical character counts. */
+function startOffsetOf(a: ChatAnchor): number {
+  return (a.pageNumber ?? 0) * 1e8 + (a.y ?? 0) * 1e4 + (a.x ?? 0);
+}
+
+/**
+ * Comparator for the spatial-anchor z-order. Returns negative when
+ * `a` should paint BEFORE `b` (a appears below b in the stack).
+ *
+ * Layered rules, top to bottom:
+ *
+ *   1. Importance — faint < preview < active. Active/preview marks
+ *      always pulse on top of background anchors so the user's
+ *      current focus is never visually obscured by the overlap
+ *      rules below.
+ *
+ *   2. Within the same brightness tier, the user-spec'd rules:
+ *
+ *      a. Text anchors paint over region anchors. When a region
+ *         drag surrounds a text highlight, the highlight stays
+ *         readable and clickable.
+ *
+ *      b. Within a kind, the SMALLER anchor paints on top. For
+ *         pairs this matches "least size outside the overlap"
+ *         exactly (overlap is fixed for the pair, so smaller =
+ *         more enclosed). For multi-anchor overlaps it's a
+ *         consistent generalization that keeps small/contained
+ *         anchors reachable.
+ *
+ *      c. Tiebreaker: later starting offset (reading-order proxy)
+ *         on top.
+ *
+ * The sort runs in ascending order, and DOM siblings without a
+ * z-index paint in document order — last child paints on top. So
+ * "should be on top" = "should sort LATER" = "comparator returns
+ * positive when this anchor outranks the other".
+ */
+function compareMarksForZ(a: Mark, b: Mark): number {
+  const impDiff = importance(a) - importance(b);
+  if (impDiff) return impDiff;
+
+  const aIsText = isTextAnchor(a.anchor);
+  const bIsText = isTextAnchor(b.anchor);
+  if (aIsText !== bIsText) return aIsText ? 1 : -1;
+
+  const aSize = sizeOfAnchor(a.anchor);
+  const bSize = sizeOfAnchor(b.anchor);
+  if (aSize !== bSize) return bSize - aSize; // smaller a → positive → on top
+
+  return startOffsetOf(a.anchor) - startOffsetOf(b.anchor);
 }
 
 function AnchorMark({
